@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
+import numpy as np
 import pandas as pd
+
+# A seed for reproducible but random results
+np.random.seed(0)
 
 CSV_PATH = 'responses.csv'
 COLUMNS_FULL = ['Telegram handle', 'First preference', 'Second preference', 'Dance role', 'If I am admitted to my first preference...']
@@ -28,6 +32,7 @@ def main():
     for group in groups:
         df[group] = None
 
+    df = df.sample(frac=1).reset_index(drop=True)
     # At this point we have a dataframe with the following columns:
     # handle = Telegram handle
     # 1 = First preference
