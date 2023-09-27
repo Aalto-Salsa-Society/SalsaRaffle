@@ -27,6 +27,13 @@ def main():
     for group in groups:
         df[group] = None
 
+    # At this point we have a dataframe with the following columns:
+    # handle = Telegram handle
+    # 1 = First preference
+    # 2 = Second preference
+    # only_1 = Whether the person only wants to join first preference
+    # all other columns = Groups that contain their place in the list
+
     # Assign all first preferences
     for group in groups:
         chose_group = df['1'].eq(group)
