@@ -56,7 +56,8 @@ def main():
         to_assign = df['2'].eq(group) & ~unlucky & ~df['only_1']
         df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
 
-    print(df.to_string())
+    for group in groups:
+        print(df[df[group].notnull()].sort_values(group)[['handle', group]].reset_index(drop=True).to_string())
 
 
 if __name__ == '__main__':
