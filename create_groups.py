@@ -7,6 +7,7 @@ COLUMNS_FULL = ['Telegram handle', 'First preference', 'Second preference', 'Dan
 COLUMNS = ['handle', 'first_preference', 'second_preference', 'role', 'only_first_preference']
 
 GROUPS_MAP = {'Level 1 M (Monday)': 'S1M', 'Level 1 T (Tuesday)': 'S1T', 'Level 2': 'S2', 'Level 3': 'S3'}
+MAX_PER_GROUP = 15
 
 
 def main():
@@ -40,7 +41,7 @@ def main():
         df.loc[chose_group, group] = chose_group.cumsum()
 
     # Assign all second preference that are not in first preference
-    unlucky = df[groups].gt(15).any(axis=1)
+    unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
     for group in groups:
         to_assign = df['2'].eq(group) & unlucky
         df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
