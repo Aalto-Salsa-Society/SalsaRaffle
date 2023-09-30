@@ -74,22 +74,34 @@ def main():
     # only_1 = Whether the person only wants to join first preference
     # all other columns = Groups that contain their place in the list
 
+    # Assign high priority first preference
+    for group in groups:
+        to_assign = df['1'].eq(group) & df['high_prio']
+        df.loc[to_assign, group] = to_assign.cumsum()
+
+    # Assign high priority second preference that are not in first preference
+    unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
+    for group in groups:
+        to_assign = df['2'].eq(group) & df['high_prio'] & unlucky
+        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+
     # Assign all first preferences
     for group in groups:
-        chose_group = df['1'].eq(group)
-        df.loc[chose_group, group] = chose_group.cumsum()
+        to_assign = df['1'].eq(group) & ~df['high_prio']
+        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
 
     # Assign all second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
     for group in groups:
-        to_assign = df['2'].eq(group) & unlucky
+        to_assign = df['2'].eq(group) & unlucky & ~df['high_prio']
         df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
 
     # Assign all remaining second preference
     for group in groups:
-        to_assign = df['2'].eq(group) & ~unlucky & ~df['only_1']
+        to_assign = df['2'].eq(group) & df[group].isnull()
         df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
 
+    print(df.to_string())
     for group in groups:
         print(df[df[group].notnull()].sort_values(group)[['handle', group]].reset_index(drop=True).to_string())
 
