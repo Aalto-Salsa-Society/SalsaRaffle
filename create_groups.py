@@ -7,11 +7,33 @@ import pandas as pd
 np.random.seed(0)
 
 CSV_PATH = 'responses.csv'
-COLUMNS_FULL = ['Telegram handle', 'First preference', 'Second preference', 'Dance role', 'If I am admitted to my first preference...']
-COLUMNS = ['handle', 'first_preference', 'second_preference', 'role', 'only_first_preference']
+COLUMNS_FULL = [
+    'Telegram handle', 'Full name (first and last name)', 'First preference', 'Second preference',
+    'Dance role', 'If I am admitted to my first preference...'
+]
+COLUMNS = ['handle', 'name', 'first_preference', 'second_preference', 'role', 'only_first_preference']
+
+ATTENDANCE_COLUMNS_FULL = ['Name', 'Week 1', 'Week 2', 'Week 3', 'Week 4']
+ATTENDANCE_COLUMNS = ['name', 'week1', 'week2', 'week3', 'week4']
 
 GROUPS_MAP = {'Level 1 M (Monday)': 'S1M', 'Level 1 T (Tuesday)': 'S1T', 'Level 2': 'S2', 'Level 3': 'S3'}
 MAX_PER_GROUP = 15
+
+
+def get_low_prio(names: pd.Series, attendance_path: str = 'attendance.csv') -> pd.Series:
+    attendance_df = pd.read_csv(attendance_path, usecols=ATTENDANCE_COLUMNS_FULL)[ATTENDANCE_COLUMNS_FULL]
+    attendance_df.columns = ATTENDANCE_COLUMNS
+
+    # Mark disruptions for no-shows
+    attendance_df['disruption'] = attendance_df[['week1', 'week2', 'week3', 'week4']].eq('No show').any(axis=1)
+    # Mark disruptions for giving notice twice
+    attendance_df['disruption'] |= attendance_df[['week1', 'week2', 'week3', 'week4']].eq('Gave notice').sum(axis=1).ge(2)
+
+    return names.isin(attendance_df[attendance_df['disruption']].name)
+
+
+def get_high_prio(names: pd.Series) -> pd.Series:
+    return names.isin(pd.read_csv('high_prio.csv').name)
 
 
 def main():
@@ -24,6 +46,15 @@ def main():
     df['only_1'] = df['only_first_preference'] == 'I would still like to join my second preference, if there is enough space'
     df.drop(columns=['first_preference', 'second_preference', 'role', 'only_first_preference'], inplace=True)
 
+    df['low_prio'] = get_low_prio(df['name'], 'attendance_bachata.csv')
+    df['low_prio'] |= get_low_prio(df['name'], 'attendance_level1M.csv')
+    df['low_prio'] |= get_low_prio(df['name'], 'attendance_level1T.csv')
+    df['low_prio'] |= get_low_prio(df['name'], 'attendance_level2.csv')
+    df['low_prio'] |= get_low_prio(df['name'], 'attendance_level3.csv')
+
+    # Give high priority only to those who are not low priority
+    df['high_prio'] = get_high_prio(df['name']) & ~df['low_prio']
+
     # First preference is required
     df = df[df['1'].notnull()]
 
@@ -35,6 +66,9 @@ def main():
     df = df.sample(frac=1).reset_index(drop=True)
     # At this point we have a dataframe with the following columns:
     # handle = Telegram handle
+    # name = Full name
+    # high_prio = Whether the person is high priority
+    # low_prio = Whether the person is low priority (cannot be both)
     # 1 = First preference
     # 2 = Second preference
     # only_1 = Whether the person only wants to join first preference
