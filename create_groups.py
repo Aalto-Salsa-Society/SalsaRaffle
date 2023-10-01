@@ -50,6 +50,10 @@ def get_high_prio(names: pd.Series) -> pd.Series:
     return names.isin(pd.read_csv('high_prio.csv').name)
 
 
+def assign_spot(df: pd.DataFrame, assignees: pd.Series, group: str):
+    df.loc[assignees, group] = assignees.cumsum() + (df[group].max() if df[group].any() else 0)
+
+
 def main():
     df = pd.read_csv(CSV_PATH)[COLUMNS_FULL]
     df.columns = COLUMNS
@@ -58,7 +62,7 @@ def main():
     df['1'] = df['first_preference'].map(GROUPS_MAP) + df['first_preference_role'].str.get(0)
     df['2'] = df['second_preference'].map(GROUPS_MAP) + df['second_preference_role'].str.get(0)
     df['2'].replace({np.nan: None}, inplace=True)
-    df['only_1'] = df['only_first_preference'].eq('I would still like to join my second preference, if there is enough space')
+    df['only_1'] = df['only_first_preference'].isnull()
     df = df[['handle', 'name', '1', '2', 'only_1']]
 
     df['low_prio'] = get_low_prio(df['name'], 'attendance_bachata.csv')
@@ -92,39 +96,39 @@ def main():
     # Assign high priority first preference
     for group in groups:
         to_assign = df['1'].eq(group) & df['high_prio']
-        df.loc[to_assign, group] = to_assign.cumsum()
+        assign_spot(df, to_assign, group)
 
     # Assign high priority second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
     for group in groups:
         to_assign = df['2'].eq(group) & df['high_prio'] & unlucky
-        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+        assign_spot(df, to_assign, group)
 
     # Assign all first preferences
     for group in groups:
         to_assign = df['1'].eq(group) & ~df['high_prio'] & ~df['low_prio']
-        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+        assign_spot(df, to_assign, group)
 
     # Assign all second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
     for group in groups:
         to_assign = df['2'].eq(group) & unlucky & ~df['high_prio'] & ~df['low_prio']
-        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+        assign_spot(df, to_assign, group)
 
     # Assign all remaining second preference not in low priority
     for group in groups:
-        to_assign = df['2'].eq(group) & df[group].isnull() & ~df['low_prio']
-        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+        to_assign = df['2'].eq(group) & df[group].isnull() & ~df['low_prio'] & ~df['only_1']
+        assign_spot(df, to_assign, group)
 
     # Assign all remaining first preference
     for group in groups:
         to_assign = df['1'].eq(group) & df[group].isnull()
-        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+        assign_spot(df, to_assign, group)
 
     # Assign all remaining second preference
     for group in groups:
-        to_assign = df['2'].eq(group) & df[group].isnull()
-        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+        to_assign = df['2'].eq(group) & df[group].isnull() & ~df['only_1']
+        assign_spot(df, to_assign, group)
 
     print(df.to_string())
     for group in groups:
