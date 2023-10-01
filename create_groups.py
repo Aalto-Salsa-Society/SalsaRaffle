@@ -10,6 +10,7 @@ import pandas as pd
 np.random.seed(0)
 
 CSV_PATH = 'responses.csv'
+OUTPUT_PATH = 'groups.csv'
 COLUMNS_FULL = [
     'Telegram handle', 'Full name (first and last name)', 'Email address',
     'First preference', 'First preference dance role',
@@ -61,19 +62,53 @@ def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]):
         df.loc[assignees, group] = assignees.cumsum() + (df[group].max() if df[group].any() else 0)
 
 
-def main():
+def initial_data_setup() -> pd.DataFrame:
+    """
+    Loads the initial data from the signup responses and creates the initial dataframe
+
+    :return: Initial dataframe
+
+    Columns
+    -------
+    handle: str
+        Telegram handle
+    name: str
+        Full name
+    email: str
+        Email address
+    high_prio: bool
+        Whether the person is high priority
+    med_prio: bool
+        Whether the person is medium priority (not high, nor low priority)
+    low_prio: bool
+        Whether the person is low priority (cannot be high priority)
+    1: str (e.g. S1MF, S2L, B2L)
+        First preference
+    2: str (e.g. S1TL, S2F, B2L)
+        Second preference
+    only_1: bool
+        Whether the person only wants to join first preference
+    S1MF: int
+        Position in queue for the S1MF group (Salsa Level 1 M (Monday) Follower)
+    B2L: int
+        Position in queue for the B2L group (Bachata Level 2 Leader)
+    (see GROUPS_MAP for the full list of groups)
+    """
     df = pd.read_csv(CSV_PATH)[COLUMNS_FULL]
     df.columns = COLUMNS
 
-    # Column cleaning/creation
+    # Create first and second preference columns
+    # For example:
+    # Salsa Level 1 M (Monday), Follower -> S1MF
+    # Salsa Level 2, Leader -> S2L
     df['1'] = df['first_preference'].map(GROUPS_MAP) + df['first_preference_role'].str.get(0)
-    # First preference is required
-    df = df[df['1'].notnull()]
     df['2'] = df['second_preference'].map(GROUPS_MAP) + df['second_preference_role'].str.get(0)
+
+    df = df[df['1'].notnull()]
     df['2'].replace({np.nan: None}, inplace=True)
     df['only_1'] = df['only_first_preference'].isnull()
-    df = df[['handle', 'name', 'email', '1', '2', 'only_1']]
 
+    # Load attendance from attendance sheets
     attendance_files = (f for f in os.listdir() if os.path.isfile(f) and f.startswith('attendance_'))
     df['low_prio'] = False
     for attendance_file in attendance_files:
@@ -81,6 +116,7 @@ def main():
 
     # Give high priority only to those who are not low priority
     df['high_prio'] = get_high_prio(df['handle']) & ~df['low_prio']
+    # Medium priority is everyone else
     df['med_prio'] = ~df['high_prio'] & ~df['low_prio']
 
     # Create columns for each group
@@ -88,17 +124,14 @@ def main():
     for group in groups:
         df[group] = None
 
-    df = df.sample(frac=1).reset_index(drop=True)
-    # At this point we have a dataframe with the following columns:
-    # handle = Telegram handle
-    # name = Full name
-    # email = Email address
-    # high_prio = Whether the person is high priority
-    # low_prio = Whether the person is low priority (cannot be both)
-    # 1 = First preference
-    # 2 = Second preference
-    # only_1 = Whether the person only wants to join first preference
-    # all other columns = Groups that contain their place in the list
+    # Randomize order with a different seed
+    column_order = ['handle', 'name', 'email', 'high_prio', 'med_prio', 'low_prio', '1', '2', 'only_1'] + groups
+    return df.sample(frac=1).reset_index(drop=True)[column_order]
+
+
+def main():
+    df = initial_data_setup()
+    groups = df['1'].unique()
 
     # Assign high priority first preference
     assign_spot(df, lambda group: df['1'].eq(group) & df['high_prio'])
@@ -117,13 +150,13 @@ def main():
     # Assign all low priority second preference that want to join more than 1 class
     assign_spot(df, lambda group: df['2'].eq(group) & df['low_prio'] & ~df['only_1'])
 
+    # Print emails in an easy to copy format for Gmail
     accepted = df[groups].le(MAX_PER_GROUP).any(axis=1)
     print('Accepted emails:')
     print(*df[accepted]['email'].unique().tolist(), sep=', ')
-    print()
     df.drop('email', axis=1, inplace=True)
 
-    print(df.to_string())
+    df.to_csv(OUTPUT_PATH, index=False)
 
 
 if __name__ == '__main__':
