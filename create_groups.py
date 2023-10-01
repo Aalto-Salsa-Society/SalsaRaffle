@@ -8,20 +8,34 @@ np.random.seed(0)
 
 CSV_PATH = 'responses.csv'
 COLUMNS_FULL = [
-    'Telegram handle', 'Full name (first and last name)', 'First preference', 'Second preference',
-    'Dance role', 'If I am admitted to my first preference...'
+    'Telegram handle', 'Full name (first and last name)',
+    'First preference', 'First preference dance role',
+    'Second preference', 'Second preference dance role',
+    'first_only'
 ]
-COLUMNS = ['handle', 'name', 'first_preference', 'second_preference', 'role', 'only_first_preference']
+COLUMNS = [
+    'handle', 'name',
+    'first_preference', 'first_preference_role',
+    'second_preference', 'second_preference_role',
+    'only_first_preference'
+]
+GROUPS_MAP = {
+    'Salsa Level 1 M (Monday)': 'S1M',
+    'Salsa Level 1 T (Tuesday)': 'S1T',
+    'Salsa Level 2': 'S2',
+    'Salsa Level 3': 'S3',
+    'Bachata Level 1': 'B1',
+    'Bachata Level 2': 'B2',
+}
 
 ATTENDANCE_COLUMNS_FULL = ['Name', 'Week 1', 'Week 2', 'Week 3', 'Week 4']
 ATTENDANCE_COLUMNS = ['name', 'week1', 'week2', 'week3', 'week4']
 
-GROUPS_MAP = {'Level 1 M (Monday)': 'S1M', 'Level 1 T (Tuesday)': 'S1T', 'Level 2': 'S2', 'Level 3': 'S3'}
 MAX_PER_GROUP = 15
 
 
 def get_low_prio(names: pd.Series, attendance_path: str = 'attendance.csv') -> pd.Series:
-    attendance_df = pd.read_csv(attendance_path, usecols=ATTENDANCE_COLUMNS_FULL)[ATTENDANCE_COLUMNS_FULL]
+    attendance_df = pd.read_csv(attendance_path)[ATTENDANCE_COLUMNS_FULL]
     attendance_df.columns = ATTENDANCE_COLUMNS
 
     # Mark disruptions for no-shows
@@ -37,14 +51,15 @@ def get_high_prio(names: pd.Series) -> pd.Series:
 
 
 def main():
-    df = pd.read_csv(CSV_PATH, usecols=COLUMNS_FULL)[COLUMNS_FULL]
+    df = pd.read_csv(CSV_PATH)[COLUMNS_FULL]
     df.columns = COLUMNS
 
     # Column cleaning/creation
-    df['1'] = df['first_preference'].map(GROUPS_MAP) + df.role.str.get(0)
-    df['2'] = df['second_preference'].map(GROUPS_MAP) + df.role.str.get(0)
-    df['only_1'] = df['only_first_preference'] == 'I would still like to join my second preference, if there is enough space'
-    df.drop(columns=['first_preference', 'second_preference', 'role', 'only_first_preference'], inplace=True)
+    df['1'] = df['first_preference'].map(GROUPS_MAP) + df['first_preference_role'].str.get(0)
+    df['2'] = df['second_preference'].map(GROUPS_MAP) + df['second_preference_role'].str.get(0)
+    df['2'].replace({np.nan: None}, inplace=True)
+    df['only_1'] = df['only_first_preference'].eq('I would still like to join my second preference, if there is enough space')
+    df = df[['handle', 'name', '1', '2', 'only_1']]
 
     df['low_prio'] = get_low_prio(df['name'], 'attendance_bachata.csv')
     df['low_prio'] |= get_low_prio(df['name'], 'attendance_level1M.csv')
