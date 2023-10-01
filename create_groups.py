@@ -11,13 +11,13 @@ np.random.seed(0)
 
 CSV_PATH = 'responses.csv'
 COLUMNS_FULL = [
-    'Telegram handle', 'Full name (first and last name)',
+    'Telegram handle', 'Full name (first and last name)', 'Email address',
     'First preference', 'First preference dance role',
     'Second preference', 'Second preference dance role',
     'first_only'
 ]
 COLUMNS = [
-    'handle', 'name',
+    'handle', 'name', 'email',
     'first_preference', 'first_preference_role',
     'second_preference', 'second_preference_role',
     'only_first_preference'
@@ -70,7 +70,7 @@ def main():
     df['2'] = df['second_preference'].map(GROUPS_MAP) + df['second_preference_role'].str.get(0)
     df['2'].replace({np.nan: None}, inplace=True)
     df['only_1'] = df['only_first_preference'].isnull()
-    df = df[['handle', 'name', '1', '2', 'only_1']]
+    df = df[['handle', 'name', 'email', '1', '2', 'only_1']]
 
     attendance_files = (f for f in os.listdir() if os.path.isfile(f) and f.startswith('attendance_'))
     df['low_prio'] = False
@@ -92,6 +92,7 @@ def main():
     # At this point we have a dataframe with the following columns:
     # handle = Telegram handle
     # name = Full name
+    # email = Email address
     # high_prio = Whether the person is high priority
     # low_prio = Whether the person is low priority (cannot be both)
     # 1 = First preference
@@ -116,9 +117,13 @@ def main():
     # Assign all remaining second preference
     assign_spot(df, lambda group: df['2'].eq(group) & df[group].isnull() & ~df['only_1'])
 
+    accepted = df[groups].le(MAX_PER_GROUP).any(axis=1)
+    print('Accepted emails:')
+    print(*df[accepted]['email'].unique().tolist(), sep=', ')
+    print()
+    df.drop('email', axis=1, inplace=True)
+
     print(df.to_string())
-    for group in groups:
-        print(df[df[group].notnull()].sort_values(group)[['handle', group]].reset_index(drop=True).to_string())
 
 
 if __name__ == '__main__':
