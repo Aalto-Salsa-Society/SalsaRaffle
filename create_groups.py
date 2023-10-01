@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -28,13 +30,13 @@ GROUPS_MAP = {
     'Bachata Level 2': 'B2',
 }
 
-ATTENDANCE_COLUMNS_FULL = ['Name', 'Week 1', 'Week 2', 'Week 3', 'Week 4']
-ATTENDANCE_COLUMNS = ['name', 'week1', 'week2', 'week3', 'week4']
+ATTENDANCE_COLUMNS_FULL = ['Handle', 'Week 1', 'Week 2', 'Week 3', 'Week 4']
+ATTENDANCE_COLUMNS = ['handle', 'week1', 'week2', 'week3', 'week4']
 
 MAX_PER_GROUP = 15
 
 
-def get_low_prio(names: pd.Series, attendance_path: str = 'attendance.csv') -> pd.Series:
+def get_low_prio(handles: pd.Series, attendance_path: str = 'attendance.csv') -> pd.Series:
     attendance_df = pd.read_csv(attendance_path)[ATTENDANCE_COLUMNS_FULL]
     attendance_df.columns = ATTENDANCE_COLUMNS
 
@@ -43,11 +45,11 @@ def get_low_prio(names: pd.Series, attendance_path: str = 'attendance.csv') -> p
     # Mark disruptions for giving notice twice
     attendance_df['disruption'] |= attendance_df[['week1', 'week2', 'week3', 'week4']].eq('Gave notice').sum(axis=1).ge(2)
 
-    return names.isin(attendance_df[attendance_df['disruption']].name)
+    return handles.isin(attendance_df[attendance_df['disruption']].handle)
 
 
-def get_high_prio(names: pd.Series) -> pd.Series:
-    return names.isin(pd.read_csv('high_prio.csv').name)
+def get_high_prio(handles: pd.Series) -> pd.Series:
+    return handles.isin(pd.read_csv('high_prio.csv').handle)
 
 
 def assign_spot(df: pd.DataFrame, assignees: pd.Series, group: str):
@@ -65,14 +67,13 @@ def main():
     df['only_1'] = df['only_first_preference'].isnull()
     df = df[['handle', 'name', '1', '2', 'only_1']]
 
-    df['low_prio'] = get_low_prio(df['name'], 'attendance_bachata.csv')
-    df['low_prio'] |= get_low_prio(df['name'], 'attendance_level1M.csv')
-    df['low_prio'] |= get_low_prio(df['name'], 'attendance_level1T.csv')
-    df['low_prio'] |= get_low_prio(df['name'], 'attendance_level2.csv')
-    df['low_prio'] |= get_low_prio(df['name'], 'attendance_level3.csv')
+    attendance_files = (f for f in os.listdir() if os.path.isfile(f) and f.startswith('attendance_'))
+    df['low_prio'] = False
+    for attendance_file in attendance_files:
+        df['low_prio'] |= get_low_prio(df['handle'], attendance_file)
 
     # Give high priority only to those who are not low priority
-    df['high_prio'] = get_high_prio(df['name']) & ~df['low_prio']
+    df['high_prio'] = get_high_prio(df['handle']) & ~df['low_prio']
 
     # First preference is required
     df = df[df['1'].notnull()]
