@@ -129,6 +129,17 @@ def initial_data_setup() -> pd.DataFrame:
     return df.sample(frac=1).reset_index(drop=True)[column_order]
 
 
+def create_group_excel_file(df: pd.DataFrame):
+    group_labels = {v: k for k, v in GROUPS_MAP.items()}
+    with pd.ExcelWriter('groups.xlsx') as writer:
+        for group in GROUPS_MAP.values():
+            leaders = df[df[group + 'L'].notnull()].sort_values(group + 'L').reset_index()[['handle', 'name']].copy()
+            leaders.columns = ['Leader Handle', 'Leader Name']
+            followers = df[df[group + 'F'].notnull()].sort_values(group + 'F').reset_index()[['handle', 'name']].copy()
+            followers.columns = ['Follower Handle', 'Follower Name']
+            pd.concat([leaders, followers], axis=1).to_excel(writer, sheet_name=group_labels[group], index=False)
+
+
 def main():
     df = initial_data_setup()
     groups = df['1'].unique()
@@ -155,8 +166,8 @@ def main():
     print('Accepted emails:')
     print(*df[accepted]['email'].unique().tolist(), sep=', ')
     df.drop('email', axis=1, inplace=True)
-
     df.to_csv(OUTPUT_PATH, index=False)
+    create_group_excel_file(df)
 
 
 if __name__ == '__main__':
