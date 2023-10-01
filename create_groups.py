@@ -77,17 +77,17 @@ def initial_data_setup() -> pd.DataFrame:
     email: str
         Email address
     high_prio: bool
-        Whether the person is high priority
+        The person is high priority
     med_prio: bool
-        Whether the person is medium priority (not high, nor low priority)
+        The person is medium priority (not high, nor low priority)
     low_prio: bool
-        Whether the person is low priority (cannot be high priority)
+        The person is low priority (cannot be high priority)
     1: str (e.g. S1MF, S2L, B2L)
         First preference
     2: str (e.g. S1TL, S2F, B2L)
         Second preference
     only_1: bool
-        Whether the person only wants to join first preference
+        The person only wants to join first preference
     S1MF: int
         Position in queue for the S1MF group (Salsa Level 1 M (Monday) Follower)
     B2L: int
