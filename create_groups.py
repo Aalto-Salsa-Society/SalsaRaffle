@@ -55,8 +55,8 @@ def get_high_prio(handles: pd.Series) -> pd.Series:
 
 def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]):
     for group in df['1'].unique():
-        # Find all people that need to be assigned according to the rule
-        assignees = assign_rule(group)
+        # Find all people that need to be assigned according to the rule and that are not already assigned
+        assignees = assign_rule(group) & df[group].isnull()
         # Assign them a spot in the group starting from the highest number in that group
         df.loc[assignees, group] = assignees.cumsum() + (df[group].max() if df[group].any() else 0)
 
@@ -67,6 +67,8 @@ def main():
 
     # Column cleaning/creation
     df['1'] = df['first_preference'].map(GROUPS_MAP) + df['first_preference_role'].str.get(0)
+    # First preference is required
+    df = df[df['1'].notnull()]
     df['2'] = df['second_preference'].map(GROUPS_MAP) + df['second_preference_role'].str.get(0)
     df['2'].replace({np.nan: None}, inplace=True)
     df['only_1'] = df['only_first_preference'].isnull()
@@ -79,9 +81,7 @@ def main():
 
     # Give high priority only to those who are not low priority
     df['high_prio'] = get_high_prio(df['handle']) & ~df['low_prio']
-
-    # First preference is required
-    df = df[df['1'].notnull()]
+    df['med_prio'] = ~df['high_prio'] & ~df['low_prio']
 
     # Create columns for each group
     groups = df['1'].unique().tolist()
@@ -105,17 +105,17 @@ def main():
     # Assign high priority second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
     assign_spot(df, lambda group: df['2'].eq(group) & df['high_prio'] & unlucky)
-    # Assign all first preferences
-    assign_spot(df, lambda group: df['1'].eq(group) & ~df['high_prio'] & ~df['low_prio'])
-    # Assign all second preference that are not in first preference
+    # Assign medium priority first preference
+    assign_spot(df, lambda group: df['1'].eq(group) & df['med_prio'])
+    # Assign medium priority second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
-    assign_spot(df, lambda group: df['2'].eq(group) & ~df['high_prio'] & ~df['low_prio'] & unlucky)
-    # Assign all remaining second preference not in low priority
-    assign_spot(df, lambda group: df['2'].eq(group) & df[group].isnull() & ~df['low_prio'] & ~df['only_1'])
-    # Assign all remaining first preference
-    assign_spot(df, lambda group: df['1'].eq(group) & df[group].isnull())
-    # Assign all remaining second preference
-    assign_spot(df, lambda group: df['2'].eq(group) & df[group].isnull() & ~df['only_1'])
+    assign_spot(df, lambda group: df['2'].eq(group) & df['med_prio'] & unlucky)
+    # Assign medium and high priority second preference that want to join more than 1 class
+    assign_spot(df, lambda group: df['2'].eq(group) & (df['med_prio'] | df['high_prio']) & ~df['only_1'])
+    # Assign all low priority first preference
+    assign_spot(df, lambda group: df['1'].eq(group) & df['low_prio'])
+    # Assign all low priority second preference that want to join more than 1 class
+    assign_spot(df, lambda group: df['2'].eq(group) & df['low_prio'] & ~df['only_1'])
 
     accepted = df[groups].le(MAX_PER_GROUP).any(axis=1)
     print('Accepted emails:')
