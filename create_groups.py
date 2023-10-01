@@ -54,14 +54,6 @@ def get_high_prio(handles: pd.Series) -> pd.Series:
     return handles.isin(pd.read_csv('high_prio.csv').handle)
 
 
-def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]):
-    for group in df['1'].unique():
-        # Find all people that need to be assigned according to the rule and that are not already assigned
-        assignees = assign_rule(group) & df[group].isnull()
-        # Assign them a spot in the group starting from the highest number in that group
-        df.loc[assignees, group] = assignees.cumsum() + (df[group].max() if df[group].any() else 0)
-
-
 def initial_data_setup() -> pd.DataFrame:
     """
     Loads the initial data from the signup responses and creates the initial dataframe
@@ -129,6 +121,24 @@ def initial_data_setup() -> pd.DataFrame:
     return df.sample(frac=1).reset_index(drop=True)[column_order]
 
 
+def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]):
+    for group in df['1'].unique():
+        # Find all people that need to be assigned according to the rule and that are not already assigned
+        assignees = assign_rule(group) & df[group].isnull()
+        # Assign them a spot in the group starting from the highest number in that group
+        df.loc[assignees, group] = assignees.cumsum() + (df[group].max() if df[group].any() else 0)
+
+
+def accepted(df: pd.DataFrame) -> pd.Series:
+    all_groups = df['1'].unique()
+    return df[all_groups].le(MAX_PER_GROUP).any(axis=1)
+
+
+def print_gmail_emails(df: pd.DataFrame):
+    print('Accepted emails:')
+    print(*df[accepted(df)]['email'].unique().tolist(), sep=', ')
+
+
 def create_group_excel_file(df: pd.DataFrame):
     group_labels = {v: k for k, v in GROUPS_MAP.items()}
     with pd.ExcelWriter('groups.xlsx') as writer:
@@ -142,18 +152,15 @@ def create_group_excel_file(df: pd.DataFrame):
 
 def main():
     df = initial_data_setup()
-    groups = df['1'].unique()
 
     # Assign high priority first preference
     assign_spot(df, lambda group: df['1'].eq(group) & df['high_prio'])
     # Assign high priority second preference that are not in first preference
-    unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
-    assign_spot(df, lambda group: df['2'].eq(group) & df['high_prio'] & unlucky)
+    assign_spot(df, lambda group: df['2'].eq(group) & df['high_prio'] & ~accepted(df))
     # Assign medium priority first preference
     assign_spot(df, lambda group: df['1'].eq(group) & df['med_prio'])
     # Assign medium priority second preference that are not in first preference
-    unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
-    assign_spot(df, lambda group: df['2'].eq(group) & df['med_prio'] & unlucky)
+    assign_spot(df, lambda group: df['2'].eq(group) & df['med_prio'] & ~accepted(df))
     # Assign medium and high priority second preference that want to join more than 1 class
     assign_spot(df, lambda group: df['2'].eq(group) & (df['med_prio'] | df['high_prio']) & ~df['only_1'])
     # Assign all low priority first preference
@@ -161,10 +168,8 @@ def main():
     # Assign all low priority second preference that want to join more than 1 class
     assign_spot(df, lambda group: df['2'].eq(group) & df['low_prio'] & ~df['only_1'])
 
-    # Print emails in an easy to copy format for Gmail
-    accepted = df[groups].le(MAX_PER_GROUP).any(axis=1)
-    print('Accepted emails:')
-    print(*df[accepted]['email'].unique().tolist(), sep=', ')
+    # Create desired outputs
+    print_gmail_emails(df)
     df.drop('email', axis=1, inplace=True)
     df.to_csv(OUTPUT_PATH, index=False)
     create_group_excel_file(df)
