@@ -87,13 +87,23 @@ def main():
 
     # Assign all first preferences
     for group in groups:
-        to_assign = df['1'].eq(group) & ~df['high_prio']
+        to_assign = df['1'].eq(group) & ~df['high_prio'] & ~df['low_prio']
         df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
 
     # Assign all second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
     for group in groups:
-        to_assign = df['2'].eq(group) & unlucky & ~df['high_prio']
+        to_assign = df['2'].eq(group) & unlucky & ~df['high_prio'] & ~df['low_prio']
+        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+
+    # Assign all remaining second preference not in low priority
+    for group in groups:
+        to_assign = df['2'].eq(group) & df[group].isnull() & ~df['low_prio']
+        df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
+
+    # Assign all remaining first preference
+    for group in groups:
+        to_assign = df['1'].eq(group) & df[group].isnull()
         df.loc[to_assign, group] = to_assign.cumsum() + df[group].max()
 
     # Assign all remaining second preference
