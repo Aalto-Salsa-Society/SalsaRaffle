@@ -109,7 +109,7 @@ def main():
     assign_spot(df, lambda group: df['1'].eq(group) & ~df['high_prio'] & ~df['low_prio'])
     # Assign all second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
-    assign_spot(df, lambda group: df['2'].eq(group) & unlucky & ~df['high_prio'] & ~df['low_prio'])
+    assign_spot(df, lambda group: df['2'].eq(group) & ~df['high_prio'] & ~df['low_prio'] & unlucky)
     # Assign all remaining second preference not in low priority
     assign_spot(df, lambda group: df['2'].eq(group) & df[group].isnull() & ~df['low_prio'] & ~df['only_1'])
     # Assign all remaining first preference
