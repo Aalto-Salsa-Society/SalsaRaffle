@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -52,8 +53,12 @@ def get_high_prio(handles: pd.Series) -> pd.Series:
     return handles.isin(pd.read_csv('high_prio.csv').handle)
 
 
-def assign_spot(df: pd.DataFrame, assignees: pd.Series, group: str):
-    df.loc[assignees, group] = assignees.cumsum() + (df[group].max() if df[group].any() else 0)
+def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]):
+    for group in df['1'].unique():
+        # Find all people that need to be assigned according to the rule
+        assignees = assign_rule(group)
+        # Assign them a spot in the group starting from the highest number in that group
+        df.loc[assignees, group] = assignees.cumsum() + (df[group].max() if df[group].any() else 0)
 
 
 def main():
@@ -95,41 +100,21 @@ def main():
     # all other columns = Groups that contain their place in the list
 
     # Assign high priority first preference
-    for group in groups:
-        to_assign = df['1'].eq(group) & df['high_prio']
-        assign_spot(df, to_assign, group)
-
+    assign_spot(df, lambda group: df['1'].eq(group) & df['high_prio'])
     # Assign high priority second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
-    for group in groups:
-        to_assign = df['2'].eq(group) & df['high_prio'] & unlucky
-        assign_spot(df, to_assign, group)
-
+    assign_spot(df, lambda group: df['2'].eq(group) & df['high_prio'] & unlucky)
     # Assign all first preferences
-    for group in groups:
-        to_assign = df['1'].eq(group) & ~df['high_prio'] & ~df['low_prio']
-        assign_spot(df, to_assign, group)
-
+    assign_spot(df, lambda group: df['1'].eq(group) & ~df['high_prio'] & ~df['low_prio'])
     # Assign all second preference that are not in first preference
     unlucky = df[groups].gt(MAX_PER_GROUP).any(axis=1)
-    for group in groups:
-        to_assign = df['2'].eq(group) & unlucky & ~df['high_prio'] & ~df['low_prio']
-        assign_spot(df, to_assign, group)
-
+    assign_spot(df, lambda group: df['2'].eq(group) & unlucky & ~df['high_prio'] & ~df['low_prio'])
     # Assign all remaining second preference not in low priority
-    for group in groups:
-        to_assign = df['2'].eq(group) & df[group].isnull() & ~df['low_prio'] & ~df['only_1']
-        assign_spot(df, to_assign, group)
-
+    assign_spot(df, lambda group: df['2'].eq(group) & df[group].isnull() & ~df['low_prio'] & ~df['only_1'])
     # Assign all remaining first preference
-    for group in groups:
-        to_assign = df['1'].eq(group) & df[group].isnull()
-        assign_spot(df, to_assign, group)
-
+    assign_spot(df, lambda group: df['1'].eq(group) & df[group].isnull())
     # Assign all remaining second preference
-    for group in groups:
-        to_assign = df['2'].eq(group) & df[group].isnull() & ~df['only_1']
-        assign_spot(df, to_assign, group)
+    assign_spot(df, lambda group: df['2'].eq(group) & df[group].isnull() & ~df['only_1'])
 
     print(df.to_string())
     for group in groups:
