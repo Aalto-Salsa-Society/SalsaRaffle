@@ -47,11 +47,11 @@ def get_low_prio(handles: pd.Series, attendance_path: str = 'attendance.csv') ->
     # Mark disruptions for giving notice twice
     attendance_df['disruption'] |= attendance_df[['week1', 'week2', 'week3', 'week4']].eq('Gave notice').sum(axis=1).ge(2)
 
-    return handles.isin(attendance_df[attendance_df['disruption']].handle)
+    return handles.isin(attendance_df[attendance_df['disruption']].handle.str.lower())
 
 
 def get_high_prio(handles: pd.Series) -> pd.Series:
-    return handles.isin(pd.read_csv('high_prio.csv').handle)
+    return handles.isin(pd.read_csv('high_prio.csv').handle.str.lower())
 
 
 def initial_data_setup() -> pd.DataFrame:
@@ -65,7 +65,7 @@ def initial_data_setup() -> pd.DataFrame:
     handle: str
         Telegram handle
     name: str
-        Full name
+        Full name (in lower case)
     email: str
         Email address
     high_prio: bool
@@ -95,6 +95,9 @@ def initial_data_setup() -> pd.DataFrame:
     # Salsa Level 2, Leader -> S2L
     df['1'] = df['first_preference'].map(GROUPS_MAP) + df['first_preference_role'].str.get(0)
     df['2'] = df['second_preference'].map(GROUPS_MAP) + df['second_preference_role'].str.get(0)
+
+    # Handles are case insensitive
+    df['handle'] = df['handle'].str.lower()
 
     df = df[df['1'].notnull()]
     df['2'].replace({np.nan: None}, inplace=True)
