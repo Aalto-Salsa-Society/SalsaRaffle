@@ -168,6 +168,8 @@ def main():
     assign_spot(df, lambda group: df['2'].eq(group) & (df['med_prio'] | df['high_prio']) & ~df['only_1'])
     # Assign all low priority first preference
     assign_spot(df, lambda group: df['1'].eq(group) & df['low_prio'])
+    # Assign all low priority second preference that are not in first preference
+    assign_spot(df, lambda group: df['2'].eq(group) & df['low_prio'] & ~accepted(df))
     # Assign all low priority second preference that want to join more than 1 class
     assign_spot(df, lambda group: df['2'].eq(group) & df['low_prio'] & ~df['only_1'])
 
