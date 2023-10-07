@@ -143,14 +143,17 @@ def print_gmail_emails(df: pd.DataFrame):
 
 
 def create_group_excel_file(df: pd.DataFrame):
+    # We need the name for each of the short version labels
     group_labels = {v: k for k, v in GROUPS_MAP.items()}
+
     with pd.ExcelWriter('groups.xlsx') as writer:
         for group in GROUPS_MAP.values():
-            leaders = df[df[group + 'L'].notnull()].sort_values(group + 'L').reset_index()[['handle', 'name']].copy()
-            leaders.columns = ['Leader Handle', 'Leader Name']
-            followers = df[df[group + 'F'].notnull()].sort_values(group + 'F').reset_index()[['handle', 'name']].copy()
-            followers.columns = ['Follower Handle', 'Follower Name']
-            pd.concat([leaders, followers], axis=1).to_excel(writer, sheet_name=group_labels[group], index=False)
+            leaders = df[df[group + 'L'].notnull()].sort_values(group + 'L').reset_index()['name'].rename('Leader Name')
+            followers = df[df[group + 'F'].notnull()].sort_values(group + 'F').reset_index()['name'].rename('Follower Name')
+
+            group_division = pd.concat([leaders, followers], axis=1)
+            group_division.index = pd.RangeIndex(start=1, stop=len(group_division) + 1)
+            group_division.to_excel(writer, sheet_name=group_labels[group])
 
 
 def main():
@@ -176,6 +179,7 @@ def main():
     # Create desired outputs
     print_gmail_emails(df)
     df.drop('email', axis=1, inplace=True)
+    print(df.to_string())
     df.to_csv(OUTPUT_PATH, index=False)
     create_group_excel_file(df)
 
