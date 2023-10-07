@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 # A seed for reproducible but random results
-np.random.seed(0)
+np.random.seed(455)
 
 CSV_PATH = 'responses.csv'
 OUTPUT_PATH = 'groups.csv'
