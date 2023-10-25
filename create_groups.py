@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 # A seed for reproducible but random results
-np.random.default_rng(455)
+rng = np.random.default_rng(455)
 
 CSV_PATH = "responses.csv"
 OUTPUT_PATH = "groups.csv"
@@ -134,7 +134,7 @@ def initial_data_setup() -> pd.DataFrame:
 
     # Randomize order with a different seed
     column_order = ["handle", "name", "email", "high_prio", "med_prio", "low_prio", "1", "2", "only_1", *groups]
-    return df.sample(frac=1).reset_index(drop=True)[column_order]
+    return df.sample(frac=1, random_state=rng).reset_index(drop=True)[column_order]
 
 
 def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]) -> None:
