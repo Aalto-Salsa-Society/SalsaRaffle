@@ -7,32 +7,24 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
+import polars as pl
 
 # A seed for reproducible but random results
-rng = np.random.default_rng(455)
+RANDOM_SEED = 455
+rng = np.random.default_rng(RANDOM_SEED)
 
 CSV_PATH = "responses.csv"
 OUTPUT_PATH = "groups.csv"
-COLUMNS_FULL = [
-    "Telegram handle",
-    "Full name (first and last name)",
-    "Email address",
-    "First preference",
-    "First preference dance role",
-    "Second preference",
-    "Second preference dance role",
-    "first_only",
-]
-COLUMNS = [
-    "handle",
-    "name",
-    "email",
-    "first_preference",
-    "first_preference_role",
-    "second_preference",
-    "second_preference_role",
-    "only_first_preference",
-]
+REGISTRATION_COLUMNS = {
+    "Telegram handle": "handle",
+    "Full name (first and last name)": "name",
+    "Email address": "email",
+    "First preference": "1",
+    "First preference dance role": "1_role",
+    "Second preference": "2",
+    "Second preference dance role": "2_role",
+    "first_only": "only_1",
+}
 GROUPS_MAP = {
     "Salsa Level 1": "S1",
     "Salsa Level 2 M (Monday)": "S2M",
@@ -42,29 +34,10 @@ GROUPS_MAP = {
     "Bachata Level 2": "B2",
 }
 
-ATTENDANCE_COLUMNS_FULL = ["Handle", "Week 1", "Week 2", "Week 3", "Week 4"]
-ATTENDANCE_COLUMNS = ["handle", "week1", "week2", "week3", "week4"]
-ATTENDANCE_WEEKS = ATTENDANCE_COLUMNS[1:]
+ATTENDANCE_COLUMNS = {"Handle": "handle", "Week 1": "week1", "Week 2": "week2", "Week 3": "week3", "Week 4": "week4"}
+ATTENDANCE_WEEKS = list(ATTENDANCE_COLUMNS.values())[1:]
 
 MAX_PER_GROUP = 15
-
-
-def get_low_prio(handles: pd.Series, attendance_path: str = "attendance.csv") -> pd.Series:
-    """Return a boolean series that correspond to the handles that are low priority."""
-    attendance_df = pd.read_csv(attendance_path)[ATTENDANCE_COLUMNS_FULL]
-    attendance_df.columns = ATTENDANCE_COLUMNS
-
-    # Mark disruptions for no-shows
-    attendance_df["disruption"] = attendance_df[ATTENDANCE_WEEKS].eq("No show").any(axis=1)
-    # Mark disruptions for giving notice twice
-    attendance_df["disruption"] |= attendance_df[ATTENDANCE_WEEKS].eq("Gave notice").sum(axis=1).ge(2)
-
-    return handles.isin(attendance_df[attendance_df["disruption"]].handle.str.lower())
-
-
-def get_high_prio(handles: pd.Series) -> pd.Series:
-    """Return a boolean series that correspond to the handles that are high priority."""
-    return handles.isin(pd.read_csv("high_prio.csv").handle.str.lower())
 
 
 def initial_data_setup() -> pd.DataFrame:
@@ -99,42 +72,61 @@ def initial_data_setup() -> pd.DataFrame:
         Position in queue for the B2L group (Bachata Level 2 Leader)
     (see GROUPS_MAP for the full list of groups)
     """
-    df = pd.read_csv(CSV_PATH)[COLUMNS_FULL]
-    df.columns = COLUMNS
+    high_prio = (
+        pl.scan_csv("high_prio.csv")
+        .with_columns(
+            (pl.col("handle").str.to_lowercase()),
+            (pl.lit(value=True).alias("high_prio")),
+        )
+        .group_by("handle")  # Remove duplicates
+        .first()
+    )
 
-    # Create first and second preference columns
-    # For example:
-    # Salsa Level 1 M (Monday), Follower -> S1MF
-    # Salsa Level 2, Leader -> S2L
-    df["1"] = df["first_preference"].map(GROUPS_MAP) + df["first_preference_role"].str.get(0)
-    df["2"] = df["second_preference"].map(GROUPS_MAP) + df["second_preference_role"].str.get(0)
+    low_prio = (
+        pl.scan_csv([f for f in os.listdir() if Path(f).is_file() and f.startswith("attendance_")])
+        .select(ATTENDANCE_COLUMNS)
+        .rename(ATTENDANCE_COLUMNS)
+        .drop_nulls("handle")
+        .with_columns(
+            (pl.col("handle").str.to_lowercase()),
+            # A "No show" or 2 "Gave notice" is considered a disruption
+            (
+                pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show"))
+                .or_(pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2))
+                .alias("disruption")
+            ),
+        )
+        .filter(pl.col("disruption"))
+        .select("handle")
+        .with_columns(pl.lit(value=True).alias("low_prio"))
+        .group_by("handle")  # Remove duplicates
+        .first()
+    )
 
-    # Handles are case insensitive
-    df["handle"] = df["handle"].str.lower()
+    df = (
+        pl.scan_csv(CSV_PATH)
+        .select(REGISTRATION_COLUMNS)
+        .rename(REGISTRATION_COLUMNS)
+        .drop_nulls("1")
+        .with_columns(
+            # Salsa Level 1, Follower -> S1F
+            (pl.col("1").map_dict(GROUPS_MAP) + pl.col("1_role").str.slice(0, length=1)),
+            (pl.col("2").map_dict(GROUPS_MAP) + pl.col("2_role").str.slice(0, length=1)),
+            (pl.col("handle").str.to_lowercase()),
+            (pl.col("only_1").is_null()),
+        )
+        .join(low_prio, on="handle", how="left")
+        .with_columns(pl.col("low_prio").fill_null(value=False))
+        .join(high_prio, on="handle", how="left")
+        .with_columns(pl.col("high_prio").fill_null(value=False))
+        # Remove high priority if they already have low priority
+        .with_columns(pl.col("high_prio").and_(pl.col("low_prio").not_()))
+        .with_columns(pl.col("high_prio").not_().and_(pl.col("only_1").not_()).alias("med_prio"))
+        .collect()
+    )
+    df = df.with_columns(pl.lit(value=None).alias(group) for group in df.get_column("1").unique())
 
-    df = df[df["1"].notna()]
-    df["2"] = df["2"].replace({np.nan: None})
-    df["only_1"] = df["only_first_preference"].isna()
-
-    # Load attendance from attendance sheets
-    attendance_files = (f for f in os.listdir() if Path(f).is_file() and f.startswith("attendance_"))
-    df["low_prio"] = False
-    for attendance_file in attendance_files:
-        df["low_prio"] |= get_low_prio(df["handle"], attendance_file)
-
-    # Give high priority only to those who are not low priority
-    df["high_prio"] = get_high_prio(df["handle"]) & ~df["low_prio"]
-    # Medium priority is everyone else
-    df["med_prio"] = ~df["high_prio"] & ~df["low_prio"]
-
-    # Create columns for each group
-    groups = df["1"].unique().tolist()
-    for group in groups:
-        df[group] = None
-
-    # Randomize order with a different seed
-    column_order = ["handle", "name", "email", "high_prio", "med_prio", "low_prio", "1", "2", "only_1", *groups]
-    return df.sample(frac=1, random_state=rng).reset_index(drop=True)[column_order]
+    return df.sample(fraction=1, shuffle=True, seed=RANDOM_SEED).to_pandas()
 
 
 def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]) -> None:
