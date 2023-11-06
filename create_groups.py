@@ -37,7 +37,7 @@ ATTENDANCE_WEEKS = list(ATTENDANCE_COLUMNS.values())[1:]
 MAX_PER_GROUP = 15
 
 
-def initial_data_setup() -> pd.DataFrame:
+def initial_data_setup() -> pl.LazyFrame:
     """
     Load the initial data from the signup responses and creates the initial dataframe.
 
@@ -111,7 +111,7 @@ def initial_data_setup() -> pd.DataFrame:
         .collect()
     )
 
-    return registrations.sample(fraction=1, shuffle=True, seed=RANDOM_SEED).to_pandas()
+    return registrations.sample(fraction=1, shuffle=True, seed=RANDOM_SEED).lazy()
 
 
 def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]) -> None:
@@ -154,7 +154,8 @@ def create_group_excel_file(df: pd.DataFrame) -> None:
 
 def main() -> None:
     """Run the main program."""
-    df = initial_data_setup()
+    lf = initial_data_setup()
+    lf = lf.collect().to_pandas()
 
     # Assign high priority first preference
     assign_spot(df, lambda group: df["1"].eq(group) & df["high_prio"])
