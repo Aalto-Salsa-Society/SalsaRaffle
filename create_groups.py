@@ -3,13 +3,11 @@
 
 from typing import Callable
 
-import numpy as np
 import pandas as pd
 import polars as pl
 
 # A seed for reproducible but random results
 RANDOM_SEED = 455
-rng = np.random.default_rng(RANDOM_SEED)
 
 CSV_PATH = "responses.csv"
 OUTPUT_PATH = "groups.csv"
