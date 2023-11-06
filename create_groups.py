@@ -69,9 +69,7 @@ def initial_data_setup() -> pd.DataFrame:
     (see GROUPS_MAP for the full list of groups)
     """
     # A list of people who were left out last cycle (manually created)
-    high_prio = (
-        pl.scan_csv("high_prio.csv").with_columns(pl.col("handle").str.to_lowercase()).collect().get_column("handle")
-    )
+    high_prio = pl.scan_csv("high_prio.csv").with_columns(pl.col("handle").str.to_lowercase()).collect()
 
     # A "No show" or 2 "Gave notice" is considered a disruption
     low_prio = (
@@ -90,7 +88,6 @@ def initial_data_setup() -> pd.DataFrame:
         .filter(pl.col("disruption"))
         .select("handle")
         .collect()
-        .get_column("handle")
     )
 
     registrations = (
@@ -104,8 +101,8 @@ def initial_data_setup() -> pd.DataFrame:
             (pl.col("2").map_dict(GROUPS_MAP) + pl.col("2_role").str.slice(0, length=1)),
             (pl.col("handle").str.to_lowercase()),
             (pl.col("only_1").is_null()),
-            (pl.col("handle").is_in(high_prio).fill_null(value=False).alias("high_prio")),
-            (pl.col("handle").is_in(low_prio).fill_null(value=False).alias("low_prio")),
+            (pl.col("handle").is_in(high_prio["handle"]).fill_null(value=False).alias("high_prio")),
+            (pl.col("handle").is_in(low_prio["handle"]).fill_null(value=False).alias("low_prio")),
         )
         .with_columns(
             # Remove high priority if they already have low priority
