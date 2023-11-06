@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """All code for creating the groups for the ASS dance classes."""
 
-import os
-from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -79,7 +77,7 @@ def initial_data_setup() -> pd.DataFrame:
 
     # A "No show" or 2 "Gave notice" is considered a disruption
     low_prio = (
-        pl.scan_csv([f for f in os.listdir() if Path(f).is_file() and f.startswith("attendance_")])
+        pl.scan_csv("attendance_*.csv")
         .select(ATTENDANCE_COLUMNS)
         .rename(ATTENDANCE_COLUMNS)
         .drop_nulls("handle")
