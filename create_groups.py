@@ -72,16 +72,12 @@ def initial_data_setup() -> pd.DataFrame:
         Position in queue for the B2L group (Bachata Level 2 Leader)
     (see GROUPS_MAP for the full list of groups)
     """
+    # A list of people who were left out last cycle (manually created)
     high_prio = (
-        pl.scan_csv("high_prio.csv")
-        .with_columns(
-            (pl.col("handle").str.to_lowercase()),
-            (pl.lit(value=True).alias("high_prio")),
-        )
-        .group_by("handle")  # Remove duplicates
-        .first()
+        pl.scan_csv("high_prio.csv").with_columns(pl.col("handle").str.to_lowercase()).collect().get_column("handle")
     )
 
+    # A "No show" or 2 "Gave notice" is considered a disruption
     low_prio = (
         pl.scan_csv([f for f in os.listdir() if Path(f).is_file() and f.startswith("attendance_")])
         .select(ATTENDANCE_COLUMNS)
@@ -89,7 +85,6 @@ def initial_data_setup() -> pd.DataFrame:
         .drop_nulls("handle")
         .with_columns(
             (pl.col("handle").str.to_lowercase()),
-            # A "No show" or 2 "Gave notice" is considered a disruption
             (
                 pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show"))
                 .or_(pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2))
@@ -98,12 +93,11 @@ def initial_data_setup() -> pd.DataFrame:
         )
         .filter(pl.col("disruption"))
         .select("handle")
-        .with_columns(pl.lit(value=True).alias("low_prio"))
-        .group_by("handle")  # Remove duplicates
-        .first()
+        .collect()
+        .get_column("handle")
     )
 
-    df = (
+    registrations = (
         pl.scan_csv(CSV_PATH)
         .select(REGISTRATION_COLUMNS)
         .rename(REGISTRATION_COLUMNS)
@@ -114,19 +108,22 @@ def initial_data_setup() -> pd.DataFrame:
             (pl.col("2").map_dict(GROUPS_MAP) + pl.col("2_role").str.slice(0, length=1)),
             (pl.col("handle").str.to_lowercase()),
             (pl.col("only_1").is_null()),
+            (pl.col("handle").is_in(high_prio).fill_null(value=False).alias("high_prio")),
+            (pl.col("handle").is_in(low_prio).fill_null(value=False).alias("low_prio")),
         )
-        .join(low_prio, on="handle", how="left")
-        .with_columns(pl.col("low_prio").fill_null(value=False))
-        .join(high_prio, on="handle", how="left")
-        .with_columns(pl.col("high_prio").fill_null(value=False))
-        # Remove high priority if they already have low priority
-        .with_columns(pl.col("high_prio").and_(pl.col("low_prio").not_()))
-        .with_columns(pl.col("high_prio").not_().and_(pl.col("only_1").not_()).alias("med_prio"))
+        .with_columns(
+            # Remove high priority if they already have low priority
+            (pl.col("high_prio") & ~pl.col("low_prio")),
+            (~(pl.col("high_prio") | pl.col("low_prio")).alias("med_prio")),
+        )
         .collect()
     )
-    df = df.with_columns(pl.lit(value=None).alias(group) for group in df.get_column("1").unique())
 
-    return df.sample(fraction=1, shuffle=True, seed=RANDOM_SEED).to_pandas()
+    return (
+        registrations.with_columns(pl.lit(value=None).alias(group) for group in registrations.get_column("1").unique())
+        .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
+        .to_pandas()
+    )
 
 
 def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]) -> None:
