@@ -29,6 +29,7 @@ GROUPS_MAP = {
     "Bachata Level 1": "B1",
     "Bachata Level 2": "B2",
 }
+GROUPS = [group + "L" for group in GROUPS_MAP.values()] + [group + "F" for group in GROUPS_MAP.values()]
 
 ATTENDANCE_COLUMNS = {"Handle": "handle", "Week 1": "week1", "Week 2": "week2", "Week 3": "week3", "Week 4": "week4"}
 ATTENDANCE_WEEKS = list(ATTENDANCE_COLUMNS.values())[1:]
@@ -79,13 +80,10 @@ def initial_data_setup() -> pd.DataFrame:
         .drop_nulls("handle")
         .with_columns(
             (pl.col("handle").str.to_lowercase()),
-            (
-                pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show"))
-                .or_(pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2))
-                .alias("disruption")
-            ),
+            (pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show")).alias("no_show")),
+            (pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2).alias("gave_notice")),
         )
-        .filter(pl.col("disruption"))
+        .filter(pl.col("no_show") | pl.col("gave_notice"))
         .select("handle")
         .collect()
     )
@@ -109,14 +107,11 @@ def initial_data_setup() -> pd.DataFrame:
             (pl.col("high_prio") & ~pl.col("low_prio")),
             (~(pl.col("high_prio") | pl.col("low_prio")).alias("med_prio")),
         )
+        .with_columns(pl.lit(value=None).alias(group) for group in GROUPS)
         .collect()
     )
 
-    return (
-        registrations.with_columns(pl.lit(value=None).alias(group) for group in registrations.get_column("1").unique())
-        .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
-        .to_pandas()
-    )
+    return registrations.sample(fraction=1, shuffle=True, seed=RANDOM_SEED).to_pandas()
 
 
 def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]) -> None:
