@@ -130,10 +130,11 @@ def accepted(df: pd.DataFrame) -> pd.Series:
     return df[all_groups].le(MAX_PER_GROUP).any(axis=1)
 
 
-def print_gmail_emails(df: pd.DataFrame) -> None:
+def print_gmail_emails(df: pl.DataFrame) -> None:
     """Print the emails of the people that have been accepted."""
+    emails = df.filter(pl.any_horizontal(pl.col(GROUPS).le(MAX_PER_GROUP))).unique().collect()["email"].to_list()
     print("Accepted emails:")
-    print(*df[accepted(df)]["email"].unique().tolist(), sep=", ")
+    print(*emails, sep=", ")
 
 
 def create_group_excel_file(df: pd.DataFrame) -> None:
@@ -176,14 +177,14 @@ def main() -> None:
     lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~accepted)
     # Assign all low priority second preference that want to join more than 1 class
     lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"))
-    lf = lf.collect().to_pandas()
 
     # Create desired outputs
-    print_gmail_emails(df)
+    print_gmail_emails(lf)
     df = df.drop("email", axis=1)
     print(df.to_string())
     df.to_csv(OUTPUT_PATH, index=False)
     create_group_excel_file(df)
+    lf = lf.collect().to_pandas()
 
 
 if __name__ == "__main__":
