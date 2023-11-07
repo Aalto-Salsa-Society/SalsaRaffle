@@ -4,6 +4,7 @@
 from typing import Callable
 
 import polars as pl
+from xlsxwriter import Workbook
 
 # A seed for reproducible but random results
 RANDOM_SEED = 455
@@ -123,26 +124,28 @@ def assign_spot(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.L
     return lf
 
 
-def print_gmail_emails(df: pl.DataFrame) -> None:
+def print_gmail_emails(df: pl.LazyFrame) -> None:
     """Print the emails of the people that have been accepted."""
     emails = df.filter(pl.any_horizontal(pl.col(GROUPS).le(MAX_PER_GROUP))).unique().collect()["email"].to_list()
     print("Accepted emails:")
     print(*emails, sep=", ")
 
 
-# def create_group_excel_file(df: pl.DataFrame) -> None:
-#     """Create an excel file with all the final group divisions."""
-#     # We need the name for each of the short version labels
-#     group_labels = {v: k for k, v in GROUPS_MAP.items()}
-#
-#     with pd.ExcelWriter("groups.xlsx") as writer:
-#         for group in GROUPS_MAP.values():
-#             leaders = df[df[group + "L"].notna()].sort_values(group + "L").reset_index()["name"].rename("Leader Name")
-#             followers = df[df[group + "F"].notna()].sort_values(group + "F").reset_index()["name"].rename("Follower Name")
-#
-#             group_division = pd.concat([leaders, followers], axis=1)
-#             group_division.index = pd.RangeIndex(start=1, stop=len(group_division) + 1)
-#             group_division.to_excel(writer, sheet_name=group_labels[group])
+def create_group_excel_file(df: pl.DataFrame) -> None:
+    """Create an excel file with all the final group divisions."""
+    # We need the name for each of the short version labels
+    group_labels = {v: k for k, v in GROUPS_MAP.items()}
+
+    with Workbook("groups.xlsx") as workbook:
+        for group in GROUPS_MAP.values():
+            leaders = df.filter(pl.col(group + "L").is_not_null()).sort(group + "L").select(pl.col("name").alias("Leader Name"))
+            followers = df.filter(pl.col(group + "F").is_not_null()).sort(group + "F").select(pl.col("name").alias("Follower Name"))
+            pl.concat([leaders, followers], how="horizontal").write_excel(
+                workbook=workbook,
+                worksheet=group_labels[group],
+                autofit=True,
+                header_format={"bold": True},
+            )
 
 
 def main() -> None:
@@ -171,11 +174,11 @@ def main() -> None:
 
     # Create desired outputs
     print_gmail_emails(lf)
-    lf = lf.drop("email")
-    lf = lf.collect()
-    print(str(lf))
-    lf.write_csv(OUTPUT_PATH)
-    # create_group_excel_file(lf)
+
+    df = lf.drop("email").collect()
+    print(str(df))
+    df.write_csv(OUTPUT_PATH)
+    create_group_excel_file(df)
 
 
 if __name__ == "__main__":
