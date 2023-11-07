@@ -3,7 +3,6 @@
 
 from typing import Callable
 
-import pandas as pd
 import polars as pl
 
 # A seed for reproducible but random results
@@ -114,7 +113,7 @@ def initial_data_setup() -> pl.LazyFrame:
     return registrations.sample(fraction=1, shuffle=True, seed=RANDOM_SEED).lazy()
 
 
-def assign_spot(lf: pl.LazyFrame, assign_rule: Callable[[str], pd.Series]) -> pl.LazyFrame:
+def assign_spot(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFrame:
     """Assign a spot in all groups according to the assign_rule."""
     for group in GROUPS:
         assignees = assign_rule(group) & pl.col(group).is_null()
@@ -124,12 +123,6 @@ def assign_spot(lf: pl.LazyFrame, assign_rule: Callable[[str], pd.Series]) -> pl
     return lf
 
 
-def accepted(df: pd.DataFrame) -> pd.Series:
-    """Return a boolean series that correspond to the handles that have been accepted in any group."""
-    all_groups = df["1"].unique()
-    return df[all_groups].le(MAX_PER_GROUP).any(axis=1)
-
-
 def print_gmail_emails(df: pl.DataFrame) -> None:
     """Print the emails of the people that have been accepted."""
     emails = df.filter(pl.any_horizontal(pl.col(GROUPS).le(MAX_PER_GROUP))).unique().collect()["email"].to_list()
@@ -137,21 +130,19 @@ def print_gmail_emails(df: pl.DataFrame) -> None:
     print(*emails, sep=", ")
 
 
-def create_group_excel_file(df: pd.DataFrame) -> None:
-    """Create an excel file with all the final group divisions."""
-    # We need the name for each of the short version labels
-    group_labels = {v: k for k, v in GROUPS_MAP.items()}
-
-    with pd.ExcelWriter("groups.xlsx") as writer:
-        for group in GROUPS_MAP.values():
-            leaders = df[df[group + "L"].notna()].sort_values(group + "L").reset_index()["name"].rename("Leader Name")
-            followers = (
-                df[df[group + "F"].notna()].sort_values(group + "F").reset_index()["name"].rename("Follower Name")
-            )
-
-            group_division = pd.concat([leaders, followers], axis=1)
-            group_division.index = pd.RangeIndex(start=1, stop=len(group_division) + 1)
-            group_division.to_excel(writer, sheet_name=group_labels[group])
+# def create_group_excel_file(df: pl.DataFrame) -> None:
+#     """Create an excel file with all the final group divisions."""
+#     # We need the name for each of the short version labels
+#     group_labels = {v: k for k, v in GROUPS_MAP.items()}
+#
+#     with pd.ExcelWriter("groups.xlsx") as writer:
+#         for group in GROUPS_MAP.values():
+#             leaders = df[df[group + "L"].notna()].sort_values(group + "L").reset_index()["name"].rename("Leader Name")
+#             followers = df[df[group + "F"].notna()].sort_values(group + "F").reset_index()["name"].rename("Follower Name")
+#
+#             group_division = pd.concat([leaders, followers], axis=1)
+#             group_division.index = pd.RangeIndex(start=1, stop=len(group_division) + 1)
+#             group_division.to_excel(writer, sheet_name=group_labels[group])
 
 
 def main() -> None:
@@ -180,11 +171,11 @@ def main() -> None:
 
     # Create desired outputs
     print_gmail_emails(lf)
-    df = df.drop("email", axis=1)
-    print(df.to_string())
-    df.to_csv(OUTPUT_PATH, index=False)
-    create_group_excel_file(df)
-    lf = lf.collect().to_pandas()
+    lf = lf.drop("email")
+    lf = lf.collect()
+    print(str(lf))
+    lf.write_csv(OUTPUT_PATH)
+    # create_group_excel_file(lf)
 
 
 if __name__ == "__main__":
