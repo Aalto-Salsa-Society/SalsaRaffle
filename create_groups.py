@@ -114,13 +114,14 @@ def initial_data_setup() -> pl.LazyFrame:
     return registrations.sample(fraction=1, shuffle=True, seed=RANDOM_SEED).lazy()
 
 
-def assign_spot(df: pd.DataFrame, assign_rule: Callable[[str], pd.Series]) -> None:
+def assign_spot(lf: pl.LazyFrame, assign_rule: Callable[[str], pd.Series]) -> pl.LazyFrame:
     """Assign a spot in all groups according to the assign_rule."""
-    for group in df["1"].unique():
-        # Find all people that need to be assigned according to the rule and that are not already assigned
-        assignees = assign_rule(group) & df[group].isna()
-        # Assign them a spot in the group starting from the highest number in that group
-        df.loc[assignees, group] = assignees.cumsum() + (df[group].max() if df[group].any() else 0)
+    for group in GROUPS:
+        assignees = assign_rule(group) & pl.col(group).is_null()
+        starting_point = pl.when(pl.col(group).max().is_null()).then(0).otherwise(pl.col(group).max())
+        lf = lf.with_columns(pl.when(assignees).then(assignees.cumsum() + starting_point).otherwise(pl.col(group)).alias(group))
+
+    return lf
 
 
 def accepted(df: pd.DataFrame) -> pd.Series:
@@ -155,24 +156,27 @@ def create_group_excel_file(df: pd.DataFrame) -> None:
 def main() -> None:
     """Run the main program."""
     lf = initial_data_setup()
-    lf = lf.collect().to_pandas()
+
+    # A person is accepted if they got a number less than 15
+    accepted = pl.any_horizontal(pl.col(GROUPS).le(MAX_PER_GROUP))
 
     # Assign high priority first preference
-    assign_spot(df, lambda group: df["1"].eq(group) & df["high_prio"])
+    lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("high_prio"))
     # Assign high priority second preference that are not in first preference
-    assign_spot(df, lambda group: df["2"].eq(group) & df["high_prio"] & ~accepted(df))
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("high_prio") & ~accepted)
     # Assign medium priority first preference
-    assign_spot(df, lambda group: df["1"].eq(group) & df["med_prio"])
+    lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("med_prio"))
     # Assign medium priority second preference that are not in first preference
-    assign_spot(df, lambda group: df["2"].eq(group) & df["med_prio"] & ~accepted(df))
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") & ~accepted)
     # Assign medium and high priority second preference that want to join more than 1 class
-    assign_spot(df, lambda group: df["2"].eq(group) & (df["med_prio"] | df["high_prio"]) & ~df["only_1"])
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") | pl.col("high_prio") & ~pl.col("only_1"))
     # Assign all low priority first preference
-    assign_spot(df, lambda group: df["1"].eq(group) & df["low_prio"])
+    lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("low_prio"))
     # Assign all low priority second preference that are not in first preference
-    assign_spot(df, lambda group: df["2"].eq(group) & df["low_prio"] & ~accepted(df))
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~accepted)
     # Assign all low priority second preference that want to join more than 1 class
-    assign_spot(df, lambda group: df["2"].eq(group) & df["low_prio"] & ~df["only_1"])
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"))
+    lf = lf.collect().to_pandas()
 
     # Create desired outputs
     print_gmail_emails(df)
