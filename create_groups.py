@@ -105,7 +105,7 @@ def initial_data_setup() -> pl.LazyFrame:
         .with_columns(
             # Remove high priority if they already have low priority
             (pl.col("high_prio") & ~pl.col("low_prio")),
-            (~(pl.col("high_prio") | pl.col("low_prio")).alias("med_prio")),
+            ((pl.col("high_prio") | pl.col("low_prio")).not_().alias("med_prio")),
         )
         .with_columns(pl.lit(value=None).alias(group) for group in GROUPS)
         .collect()
@@ -164,7 +164,7 @@ def main() -> None:
     # Assign medium priority second preference that are not in first preference
     lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") & ~accepted)
     # Assign medium and high priority second preference that want to join more than 1 class
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") | pl.col("high_prio") & ~pl.col("only_1"))
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & (pl.col("med_prio") | pl.col("high_prio")) & ~pl.col("only_1"))
     # Assign all low priority first preference
     lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("low_prio"))
     # Assign all low priority second preference that are not in first preference
