@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """All code for creating the groups for the ASS dance classes."""
 
 from typing import Callable
