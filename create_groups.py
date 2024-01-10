@@ -124,9 +124,9 @@ def assign_spot(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.L
     return lf
 
 
-def print_gmail_emails(df: pl.LazyFrame) -> None:
+def print_gmail_emails(lf: pl.LazyFrame) -> None:
     """Print the emails of the people that have been accepted."""
-    emails = df.filter(pl.any_horizontal(pl.col(GROUPS).le(MAX_PER_GROUP))).unique().collect()["email"].to_list()
+    emails = lf.unique().collect()["email"].to_list()
     print("Accepted emails:")
     print(*emails, sep=", ")
 
@@ -173,7 +173,7 @@ def main() -> None:
     lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"))
 
     # Create desired outputs
-    print_gmail_emails(lf)
+    print_gmail_emails(lf.filter(accepted))
 
     df = lf.drop("email").collect()
     print(str(df))
