@@ -23,9 +23,9 @@ REGISTRATION_COLUMNS = {
 }
 GROUPS_MAP = {
     "Salsa Level 1": "S1",
-    "Salsa Level 2 M (Monday)": "S2M",
-    "Salsa Level 2 T (Tuesday)": "S2T",
+    "Salsa Level 2": "S2",
     "Salsa Level 3": "S3",
+    "Salsa Level 4": "S4",
     "Bachata Level 1": "B1",
     "Bachata Level 2": "B2",
 }
