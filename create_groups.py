@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """All code for creating the groups for the ASS dance classes."""
 
+import logging
+import os
 from typing import Callable
 
 import polars as pl
@@ -37,6 +39,41 @@ ATTENDANCE_WEEKS = list(ATTENDANCE_COLUMNS.values())[1:]
 MAX_PER_GROUP = 15
 
 
+def get_high_priority() -> pl.Series:
+    """Return a list of people who were left out last cycle (manually created)."""
+    if "high_prio.csv" not in os.listdir():
+        logging.warning("No high priority list found")
+        return pl.Series(dtype=pl.Utf8)
+    return pl.scan_csv("high_prio.csv").with_columns(pl.col("handle").str.to_lowercase()).collect().get_column("handle")
+
+
+def get_low_priority() -> pl.Series:
+    """
+    Return a list of people who are considered a disruption.
+
+    Members are considered disruptive a "No show" or 2 "Gave notice" is considered a disruption.
+    """
+    if not any("attendance_" in file for file in os.listdir()):
+        logging.warning("No attendance files found")
+        return pl.Series(dtype=pl.Utf8)
+
+    return (
+        pl.scan_csv("attendance_*.csv")
+        .select(ATTENDANCE_COLUMNS)
+        .rename(ATTENDANCE_COLUMNS)
+        .drop_nulls("handle")
+        .with_columns(
+            (pl.col("handle").str.to_lowercase()),
+            (pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show")).alias("no_show")),
+            (pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2).alias("gave_notice")),
+        )
+        .filter(pl.col("no_show") | pl.col("gave_notice"))
+        .select("handle")
+        .collect()
+        .get_column("handle")
+    )
+
+
 def initial_data_setup() -> pl.LazyFrame:
     """
     Load the initial data from the signup responses and creates the initial dataframe.
@@ -69,25 +106,6 @@ def initial_data_setup() -> pl.LazyFrame:
         Position in queue for the B2L group (Bachata Level 2 Leader)
     (see GROUPS_MAP for the full list of groups)
     """
-    # A list of people who were left out last cycle (manually created)
-    high_prio = pl.scan_csv("high_prio.csv").with_columns(pl.col("handle").str.to_lowercase()).collect()
-
-    # A "No show" or 2 "Gave notice" is considered a disruption
-    low_prio = (
-        pl.scan_csv("attendance_*.csv")
-        .select(ATTENDANCE_COLUMNS)
-        .rename(ATTENDANCE_COLUMNS)
-        .drop_nulls("handle")
-        .with_columns(
-            (pl.col("handle").str.to_lowercase()),
-            (pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show")).alias("no_show")),
-            (pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2).alias("gave_notice")),
-        )
-        .filter(pl.col("no_show") | pl.col("gave_notice"))
-        .select("handle")
-        .collect()
-    )
-
     registrations = (
         pl.scan_csv(CSV_PATH)
         .select(REGISTRATION_COLUMNS)
@@ -99,8 +117,8 @@ def initial_data_setup() -> pl.LazyFrame:
             (pl.col("2").map_dict(GROUPS_MAP) + pl.col("2_role").str.slice(0, length=1)),
             (pl.col("handle").str.to_lowercase()),
             (pl.col("only_1").is_null()),
-            (pl.col("handle").is_in(high_prio["handle"]).fill_null(value=False).alias("high_prio")),
-            (pl.col("handle").is_in(low_prio["handle"]).fill_null(value=False).alias("low_prio")),
+            (pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio")),
+            (pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio")),
         )
         .with_columns(
             # Remove high priority if they already have low priority
