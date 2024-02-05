@@ -172,21 +172,23 @@ def main() -> None:
 
     # A person is accepted if they got a number less than 15
     accepted = pl.any_horizontal(pl.col(GROUPS).le(MAX_PER_GROUP))
+    # Required due to Kleene's logic
+    rejected = pl.any_horizontal(pl.col(GROUPS).gt(MAX_PER_GROUP))
 
     # Assign high priority first preference
     lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("high_prio"))
     # Assign high priority second preference that are not in first preference
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("high_prio") & ~accepted)
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("high_prio") & rejected)
     # Assign medium priority first preference
     lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("med_prio"))
     # Assign medium priority second preference that are not in first preference
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") & ~accepted)
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") & rejected)
     # Assign medium and high priority second preference that want to join more than 1 class
     lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & (pl.col("med_prio") | pl.col("high_prio")) & ~pl.col("only_1"))
     # Assign all low priority first preference
     lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("low_prio"))
     # Assign all low priority second preference that are not in first preference
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~accepted)
+    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & rejected)
     # Assign all low priority second preference that want to join more than 1 class
     lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"))
 
