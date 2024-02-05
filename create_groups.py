@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """All code for creating the groups for the ASS dance classes."""
 
+import enum
 import logging
 import os
 from typing import Callable
@@ -22,6 +23,25 @@ REGISTRATION_COLUMNS = {
     "Second preference": "2",
     "Second preference dance role": "2_role",
     "first_only": "only_1",
+}
+
+
+class Timeslot(enum.IntEnum):
+    """Represents a timeslot in which a class can happen."""
+
+    MONDAY = enum.auto()
+    TUESDAY_1 = enum.auto()
+    TUESDAY_2 = enum.auto()
+    THURSDAY = enum.auto()
+
+
+GROUPS_TIMESLOTS_MAP = {
+    "Salsa Level 1": Timeslot.THURSDAY,
+    "Salsa Level 2": Timeslot.MONDAY,
+    "Salsa Level 3": Timeslot.MONDAY,
+    "Salsa Level 4": Timeslot.THURSDAY,
+    "Bachata Level 1": Timeslot.TUESDAY_1,
+    "Bachata Level 2": Timeslot.TUESDAY_2,
 }
 GROUPS_MAP = {
     "Salsa Level 1": "S1",
@@ -112,11 +132,18 @@ def initial_data_setup() -> pl.LazyFrame:
         .rename(REGISTRATION_COLUMNS)
         .drop_nulls("1")
         .with_columns(
+            pl.col("1").map_dict(GROUPS_TIMESLOTS_MAP).alias("timeslot_1"),
+            pl.col("2").map_dict(GROUPS_TIMESLOTS_MAP).alias("timeslot_2"),
+        )
+        .with_columns(
             # Salsa Level 1, Follower -> S1F
             (pl.col("1").map_dict(GROUPS_MAP) + pl.col("1_role").str.slice(0, length=1)),
             (pl.col("2").map_dict(GROUPS_MAP) + pl.col("2_role").str.slice(0, length=1)),
             (pl.col("handle").str.to_lowercase()),
-            (pl.col("only_1").is_null()),
+            # Only allow 1 preference if the second preference is not the same class as the first
+            (pl.col("only_1").is_null() | pl.col("timeslot_1").eq(pl.col("timeslot_2"))).alias("only_1"),
+        )
+        .with_columns(
             (pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio")),
             (pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio")),
         )
