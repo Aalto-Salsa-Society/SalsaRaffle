@@ -2,6 +2,7 @@
 """All code for creating the groups for the ASS dance classes."""
 
 import enum
+import itertools
 import logging
 import os
 from typing import Callable
@@ -51,9 +52,20 @@ GROUPS_MAP = {
     "Bachata Level 1": "B1",
     "Bachata Level 2": "B2",
 }
-GROUPS = [group + "L" for group in GROUPS_MAP.values()] + [group + "F" for group in GROUPS_MAP.values()]
+GROUPS = list(
+    itertools.chain(
+        (group + "L" for group in GROUPS_MAP.values()),
+        (group + "F" for group in GROUPS_MAP.values()),
+    )
+)
 
-ATTENDANCE_COLUMNS = {"Handle": "handle", "Week 1": "week1", "Week 2": "week2", "Week 3": "week3", "Week 4": "week4"}
+ATTENDANCE_COLUMNS = {
+    "Handle": "handle",
+    "Week 1": "week1",
+    "Week 2": "week2",
+    "Week 3": "week3",
+    "Week 4": "week4",
+}
 ATTENDANCE_WEEKS = list(ATTENDANCE_COLUMNS.values())[1:]
 
 MAX_PER_GROUP = 15
@@ -64,7 +76,12 @@ def get_high_priority() -> pl.Series:
     if "high_prio.csv" not in os.listdir():
         logging.warning("No high priority list found")
         return pl.Series(dtype=pl.Utf8)
-    return pl.scan_csv("high_prio.csv").with_columns(pl.col("handle").str.to_lowercase()).collect().get_column("handle")
+    return (
+        pl.scan_csv("high_prio.csv")
+        .with_columns(pl.col("handle").str.to_lowercase())
+        .collect()
+        .get_column("handle")
+    )
 
 
 def get_low_priority() -> pl.Series:
@@ -85,7 +102,11 @@ def get_low_priority() -> pl.Series:
         .with_columns(
             pl.col("handle").str.to_lowercase(),
             pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show")).alias("no_show"),
-            pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2).alias("gave_notice"),
+            (
+                pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice"))
+                .ge(2)
+                .alias("gave_notice")
+            ),
         )
         .filter(pl.col("no_show") | pl.col("gave_notice"))
         .select("handle")
@@ -143,7 +164,12 @@ def get_class_registrations() -> pl.LazyFrame:
             pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio"),
             pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio"),
             # Only allow 1 preference if the second preference is not the same class as the first
-            (pl.col("only_1").is_null() | pl.col("timeslot_1").eq(pl.col("timeslot_2"))).alias("only_1"),
+            (
+                pl.col("only_1")
+                .is_null()
+                .or_(pl.col("timeslot_1").eq(pl.col("timeslot_2")))
+                .alias("only_1")
+            ),
         )
         .with_columns(
             # Remove high priority if they already have low priority
@@ -158,21 +184,27 @@ def get_class_registrations() -> pl.LazyFrame:
     )
 
 
-
-def assign_spot(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFrame:
+def assign(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFrame:
     """Assign a spot in all groups according to the assign_rule."""
     for group in GROUPS:
         assignees = assign_rule(group) & pl.col(group).is_null()
-        starting_point = pl.when(pl.col(group).max().is_null()).then(0).otherwise(pl.col(group).max())
-        lf = lf.with_columns(pl.when(assignees).then(assignees.cumsum() + starting_point).otherwise(pl.col(group)).alias(group))
+        starting_point = (
+            pl.when(pl.col(group).max().is_null()).then(0).otherwise(pl.col(group).max())
+        )
+        lf = lf.with_columns(
+            pl.when(assignees)
+            .then(assignees.cumsum() + starting_point)
+            .otherwise(pl.col(group))
+            .alias(group)
+        )
 
     return lf
 
 
 def print_gmail_emails(lf: pl.LazyFrame) -> None:
     """Print the emails of the people that have been accepted."""
-    emails = lf.unique().collect()["email"].to_list()
-    print("Accepted emails:")
+    emails = lf.unique().collect().get_column("email").to_list()
+    print(f"Accepted emails {len(emails)}:")
     print(*emails, sep=", ")
 
 
@@ -183,8 +215,16 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
 
     with Workbook("groups.xlsx") as workbook:
         for group in GROUPS_MAP.values():
-            leaders = df.filter(pl.col(group + "L").is_not_null()).sort(group + "L").select(pl.col("name").alias("Leader Name"))
-            followers = df.filter(pl.col(group + "F").is_not_null()).sort(group + "F").select(pl.col("name").alias("Follower Name"))
+            leaders = (
+                df.filter(pl.col(group + "L").is_not_null())
+                .sort(group + "L")
+                .select(pl.col("name").alias("Leader Name"))
+            )
+            followers = (
+                df.filter(pl.col(group + "F").is_not_null())
+                .sort(group + "F")
+                .select(pl.col("name").alias("Follower Name"))
+            )
             pl.concat((leaders, followers), how="horizontal").write_excel(
                 workbook=workbook,
                 worksheet=group_labels[group],
@@ -203,21 +243,21 @@ def main() -> None:
     rejected = pl.any_horizontal(pl.col(GROUPS).gt(MAX_PER_GROUP))
 
     # Assign high priority first preference
-    lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("high_prio"))
+    lf = assign(lf, lambda group: pl.col("1").eq(group) & pl.col("high_prio"))
     # Assign high priority second preference that are not in first preference
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("high_prio") & rejected)
+    lf = assign(lf, lambda group: pl.col("2").eq(group) & pl.col("high_prio") & rejected)
     # Assign medium priority first preference
-    lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("med_prio"))
+    lf = assign(lf, lambda group: pl.col("1").eq(group) & pl.col("med_prio"))
     # Assign medium priority second preference that are not in first preference
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") & rejected)
-    # Assign medium and high priority second preference that want to join more than 1 class
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & (pl.col("med_prio") | pl.col("high_prio")) & ~pl.col("only_1"))
+    lf = assign(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") & rejected)
+    # Assign med and high priority (not low) second preference that want to join more than 1 class
+    lf = assign(lf, lambda group: pl.col("2").eq(group) & ~pl.col("low_prio") & ~pl.col("only_1"))
     # Assign all low priority first preference
-    lf = assign_spot(lf, lambda group: pl.col("1").eq(group) & pl.col("low_prio"))
+    lf = assign(lf, lambda group: pl.col("1").eq(group) & pl.col("low_prio"))
     # Assign all low priority second preference that are not in first preference
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & rejected)
+    lf = assign(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & rejected)
     # Assign all low priority second preference that want to join more than 1 class
-    lf = assign_spot(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"))
+    lf = assign(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"))
 
     # Create desired outputs
     print_gmail_emails(lf.filter(accepted))
