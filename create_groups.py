@@ -71,7 +71,7 @@ def get_low_priority() -> pl.Series:
     """
     Return a list of people who are considered a disruption.
 
-    Members are considered disruptive a "No show" or 2 "Gave notice" is considered a disruption.
+    Members with a "No show" or 2 "Gave notice" are considered a disruption.
     """
     if not any("attendance_" in file for file in os.listdir()):
         logging.warning("No attendance files found")
@@ -83,9 +83,9 @@ def get_low_priority() -> pl.Series:
         .rename(ATTENDANCE_COLUMNS)
         .drop_nulls("handle")
         .with_columns(
-            (pl.col("handle").str.to_lowercase()),
-            (pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show")).alias("no_show")),
-            (pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2).alias("gave_notice")),
+            pl.col("handle").str.to_lowercase(),
+            pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show")).alias("no_show"),
+            pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice")).ge(2).alias("gave_notice"),
         )
         .filter(pl.col("no_show") | pl.col("gave_notice"))
         .select("handle")
@@ -94,7 +94,7 @@ def get_low_priority() -> pl.Series:
     )
 
 
-def initial_data_setup() -> pl.LazyFrame:
+def get_class_registrations() -> pl.LazyFrame:
     """
     Load the initial data from the signup responses and creates the initial dataframe.
 
@@ -126,37 +126,37 @@ def initial_data_setup() -> pl.LazyFrame:
         Position in queue for the B2L group (Bachata Level 2 Leader)
     (see GROUPS_MAP for the full list of groups)
     """
-    registrations = (
+    return (
         pl.scan_csv(CSV_PATH)
         .select(REGISTRATION_COLUMNS)
         .rename(REGISTRATION_COLUMNS)
         .drop_nulls("1")
         .with_columns(
+            # Salsa Level 1, Follower -> S1F
+            pl.col("1").map_dict(GROUPS_MAP) + pl.col("1_role").str.slice(0, length=1),
+            pl.col("2").map_dict(GROUPS_MAP) + pl.col("2_role").str.slice(0, length=1),
+            pl.col("handle").str.to_lowercase(),
             pl.col("1").map_dict(GROUPS_TIMESLOTS_MAP).alias("timeslot_1"),
             pl.col("2").map_dict(GROUPS_TIMESLOTS_MAP).alias("timeslot_2"),
         )
         .with_columns(
-            # Salsa Level 1, Follower -> S1F
-            (pl.col("1").map_dict(GROUPS_MAP) + pl.col("1_role").str.slice(0, length=1)),
-            (pl.col("2").map_dict(GROUPS_MAP) + pl.col("2_role").str.slice(0, length=1)),
-            (pl.col("handle").str.to_lowercase()),
+            pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio"),
+            pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio"),
             # Only allow 1 preference if the second preference is not the same class as the first
             (pl.col("only_1").is_null() | pl.col("timeslot_1").eq(pl.col("timeslot_2"))).alias("only_1"),
         )
         .with_columns(
-            (pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio")),
-            (pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio")),
-        )
-        .with_columns(
             # Remove high priority if they already have low priority
-            (pl.col("high_prio") & ~pl.col("low_prio")),
-            ((pl.col("high_prio") | pl.col("low_prio")).not_().alias("med_prio")),
+            pl.col("high_prio") & ~pl.col("low_prio"),
+            (~pl.col("high_prio") & ~pl.col("low_prio")).alias("med_prio"),
         )
         .with_columns(pl.lit(value=None).alias(group) for group in GROUPS)
         .collect()
+        # Sample only works on a DataFrame, not a LazyFrame
+        .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
+        .lazy()
     )
 
-    return registrations.sample(fraction=1, shuffle=True, seed=RANDOM_SEED).lazy()
 
 
 def assign_spot(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFrame:
@@ -185,7 +185,7 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
         for group in GROUPS_MAP.values():
             leaders = df.filter(pl.col(group + "L").is_not_null()).sort(group + "L").select(pl.col("name").alias("Leader Name"))
             followers = df.filter(pl.col(group + "F").is_not_null()).sort(group + "F").select(pl.col("name").alias("Follower Name"))
-            pl.concat([leaders, followers], how="horizontal").write_excel(
+            pl.concat((leaders, followers), how="horizontal").write_excel(
                 workbook=workbook,
                 worksheet=group_labels[group],
                 autofit=True,
@@ -195,7 +195,7 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
 
 def main() -> None:
     """Run the main program."""
-    lf = initial_data_setup()
+    lf = get_class_registrations()
 
     # A person is accepted if they got a number less than 15
     accepted = pl.any_horizontal(pl.col(GROUPS).le(MAX_PER_GROUP))
