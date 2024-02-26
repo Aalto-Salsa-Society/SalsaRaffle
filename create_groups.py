@@ -97,13 +97,14 @@ def get_low_priority() -> pl.Series:
 
     Members with a "No show" or 2 "Gave notice" are considered a disruption.
     """
-    if not any("attendance_" in file for file in os.listdir()):
-        logging.warning("No attendance files found")
+    if "attendance_prev.xlsx" not in os.listdir():
+        logging.warning("No attendance file found")
         return pl.Series(dtype=pl.Utf8)
 
     all_sheets = pl.read_excel("attendance_prev.xlsx", sheet_id=0)
     return (
-        pl.scan_csv("attendance_*.csv")
+        pl.concat(all_sheets.values())
+        .lazy()
         .select(ATTENDANCE_COLUMNS)
         .rename(ATTENDANCE_COLUMNS)
         .drop_nulls("handle")

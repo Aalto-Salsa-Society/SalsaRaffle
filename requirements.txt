@@ -1,2 +1,2 @@
-polars
+polars[xlsx2csv]
 xlsxwriter
