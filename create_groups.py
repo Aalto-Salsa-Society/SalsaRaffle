@@ -12,9 +12,8 @@ from xlsxwriter import Workbook
 
 # A seed for reproducible but random results
 RANDOM_SEED = 455
+MAX_PER_GROUP = 15
 
-CSV_PATH = "responses.csv"
-OUTPUT_PATH = "groups.csv"
 REGISTRATION_COLUMNS = {
     "Telegram handle": "handle",
     "Full name (first and last name)": "name",
@@ -36,7 +35,7 @@ class Timeslot(enum.IntEnum):
     THURSDAY = enum.auto()
 
 
-GROUPS_TIMESLOTS_MAP = {
+GROUP_TO_TIMESLOT = {
     "Salsa Level 1": Timeslot.THURSDAY,
     "Salsa Level 2": Timeslot.MONDAY,
     "Salsa Level 3": Timeslot.MONDAY,
@@ -44,7 +43,7 @@ GROUPS_TIMESLOTS_MAP = {
     "Bachata Level 1": Timeslot.TUESDAY_1,
     "Bachata Level 2": Timeslot.TUESDAY_2,
 }
-GROUPS_MAP = {
+GROUP_TO_LABEL = {
     "Salsa Level 1": "S1",
     "Salsa Level 2": "S2",
     "Salsa Level 3": "S3",
@@ -52,24 +51,16 @@ GROUPS_MAP = {
     "Bachata Level 1": "B1",
     "Bachata Level 2": "B2",
 }
-GROUP_LABELS = {v: k for k, v in GROUPS_MAP.items()}
-GROUPS = list(
-    itertools.chain(
-        (group + "L" for group in GROUPS_MAP.values()),
-        (group + "F" for group in GROUPS_MAP.values()),
-    )
-)
+LABEL_TO_GROUP = {v: k for k, v in GROUP_TO_LABEL.items()}
+ALL_GROUPS = [g + r for g, r in itertools.product(GROUP_TO_LABEL.values(), ("L", "F"))]
 
-ATTENDANCE_COLUMNS = {
-    "Handle": "handle",
+ATTENDANCE_WEEKS = {
     "Week 1": "week1",
     "Week 2": "week2",
     "Week 3": "week3",
     "Week 4": "week4",
 }
-ATTENDANCE_WEEKS = list(ATTENDANCE_COLUMNS.values())[1:]
-
-MAX_PER_GROUP = 15
+ATTENDANCE_COLUMNS = {"Handle": "handle", **ATTENDANCE_WEEKS}
 
 
 def get_high_priority() -> pl.Series:
@@ -77,6 +68,7 @@ def get_high_priority() -> pl.Series:
     if "high_prio.csv" not in os.listdir():
         logging.warning("No high priority list found")
         return pl.Series(dtype=pl.Utf8)
+
     return (
         pl.scan_csv("high_prio.csv")
         .with_columns(pl.col("handle").str.to_lowercase())
@@ -95,6 +87,7 @@ def get_low_priority() -> pl.Series:
         logging.warning("No attendance files found")
         return pl.Series(dtype=pl.Utf8)
 
+    all_sheets = pl.read_excel("attendance_prev.xlsx", sheet_id=0)
     return (
         pl.scan_csv("attendance_*.csv")
         .select(ATTENDANCE_COLUMNS)
@@ -102,9 +95,11 @@ def get_low_priority() -> pl.Series:
         .drop_nulls("handle")
         .with_columns(
             pl.col("handle").str.to_lowercase(),
-            pl.any_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("No show")).alias("no_show"),
+            pl.any_horizontal(pl.col(ATTENDANCE_WEEKS.values()).eq_missing("No show")).alias(
+                "no_show"
+            ),
             (
-                pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS).eq_missing("Gave notice"))
+                pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS.values()).eq_missing("Gave notice"))
                 .ge(2)
                 .alias("gave_notice")
             ),
@@ -149,17 +144,17 @@ def get_class_registrations() -> pl.LazyFrame:
     (see GROUPS_MAP for the full list of groups)
     """
     return (
-        pl.scan_csv(CSV_PATH)
+        pl.scan_csv("responses.csv")
         .select(REGISTRATION_COLUMNS)
         .rename(REGISTRATION_COLUMNS)
         .drop_nulls("1")
         .with_columns(
             # Salsa Level 1, Follower -> S1F
-            pl.col("1").map_dict(GROUPS_MAP) + pl.col("1_role").str.slice(0, length=1),
-            pl.col("2").map_dict(GROUPS_MAP) + pl.col("2_role").str.slice(0, length=1),
+            pl.col("1").map_dict(GROUP_TO_LABEL) + pl.col("1_role").str.slice(0, length=1),
+            pl.col("2").map_dict(GROUP_TO_LABEL) + pl.col("2_role").str.slice(0, length=1),
             pl.col("handle").str.to_lowercase(),
-            pl.col("1").map_dict(GROUPS_TIMESLOTS_MAP).alias("timeslot_1"),
-            pl.col("2").map_dict(GROUPS_TIMESLOTS_MAP).alias("timeslot_2"),
+            pl.col("1").map_dict(GROUP_TO_TIMESLOT).alias("timeslot_1"),
+            pl.col("2").map_dict(GROUP_TO_TIMESLOT).alias("timeslot_2"),
         )
         .with_columns(
             pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio"),
@@ -177,7 +172,7 @@ def get_class_registrations() -> pl.LazyFrame:
             pl.col("high_prio") & ~pl.col("low_prio"),
             (~pl.col("high_prio") & ~pl.col("low_prio")).alias("med_prio"),
         )
-        .with_columns(pl.lit(value=None).alias(group) for group in GROUPS)
+        .with_columns(pl.lit(value=None).alias(group) for group in ALL_GROUPS)
         .collect()
         # Sample only works on a DataFrame, not a LazyFrame
         .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
@@ -187,7 +182,7 @@ def get_class_registrations() -> pl.LazyFrame:
 
 def assign(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFrame:
     """Assign a spot in all groups according to the assign_rule."""
-    for group in GROUPS:
+    for group in ALL_GROUPS:
         assignees = assign_rule(group) & pl.col(group).is_null()
         starting_point = (
             pl.when(pl.col(group).max().is_null()).then(0).otherwise(pl.col(group).max())
@@ -212,7 +207,7 @@ def print_gmail_emails(lf: pl.LazyFrame) -> None:
 def create_group_excel_file(df: pl.DataFrame) -> None:
     """Create an excel file with all the final group divisions."""
     with Workbook("groups.xlsx") as workbook:
-        for group in GROUPS_MAP.values():
+        for group in GROUP_TO_LABEL.values():
             leaders = (
                 df.filter(pl.col(group + "L").is_not_null())
                 .sort(group + "L")
@@ -225,7 +220,7 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
             )
             pl.concat((leaders, followers), how="horizontal").write_excel(
                 workbook=workbook,
-                worksheet=GROUP_LABELS[group],
+                worksheet=LABEL_TO_GROUP[group],
                 autofit=True,
                 header_format={"bold": True},
             )
@@ -246,10 +241,10 @@ def create_attendance_sheet(
             pl.col("name").alias("Name"),
             pl.col("handle").alias("Handle"),
         )
-        .with_columns(pl.lit(value=None).alias(keys) for keys in list(ATTENDANCE_COLUMNS)[1:])
+        .with_columns(pl.lit(value=None).alias(keys) for keys in ATTENDANCE_WEEKS)
         .write_excel(
             workbook=workbook,
-            worksheet=GROUP_LABELS[group] + " " + role,
+            worksheet=LABEL_TO_GROUP[group] + " " + role,
             autofit=True,
             header_format={"bold": True},
         )
@@ -261,9 +256,9 @@ def main() -> None:
     lf = get_class_registrations()
 
     # A person is accepted if they got a number less than 15
-    accepted = pl.any_horizontal(pl.col(GROUPS).le(MAX_PER_GROUP))
+    accepted = pl.any_horizontal(pl.col(ALL_GROUPS).le(MAX_PER_GROUP))
     # Required due to Kleene's logic
-    rejected = pl.any_horizontal(pl.col(GROUPS).gt(MAX_PER_GROUP))
+    rejected = pl.any_horizontal(pl.col(ALL_GROUPS).gt(MAX_PER_GROUP))
 
     # Assign high priority first preference
     lf = assign(lf, lambda group: pl.col("1").eq(group) & pl.col("high_prio"))
@@ -287,11 +282,11 @@ def main() -> None:
 
     df = lf.drop("email").collect()
     print(str(df))
-    df.write_csv(OUTPUT_PATH)
+    df.write_csv("groups.csv")
     create_group_excel_file(df)
 
     with Workbook("attendance.xlsx") as workbook:
-        for group in GROUPS_MAP.values():
+        for group in GROUP_TO_LABEL.values():
             create_attendance_sheet(df, workbook, group, "Leader")
             create_attendance_sheet(df, workbook, group, "Follower")
 
