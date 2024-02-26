@@ -63,6 +63,20 @@ ATTENDANCE_WEEKS = {
 ATTENDANCE_COLUMNS = {"Handle": "handle", **ATTENDANCE_WEEKS}
 
 
+def get_members_email() -> pl.Series:
+    """Return a list of ASS members."""
+    if "members.csv" not in os.listdir():
+        logging.warning("No attendance list found")
+        return pl.Series(dtype=pl.Utf8)
+
+    return (
+        pl.scan_csv("members.csv")
+        .select(pl.col("Email address"))
+        .collect()
+        .get_column("Email address")
+    )
+
+
 def get_high_priority() -> pl.Series:
     """Return a list of people who were left out last cycle (manually created)."""
     if "high_prio.csv" not in os.listdir():
@@ -131,6 +145,8 @@ def get_class_registrations() -> pl.LazyFrame:
         The person is medium priority (not high, nor low priority)
     low_prio: bool
         The person is low priority (cannot be high priority)
+    member: bool
+        The person is a member
     1: str (e.g. S1MF, S2L, B2L)
         First preference
     2: str (e.g. S1TL, S2F, B2L)
@@ -159,6 +175,7 @@ def get_class_registrations() -> pl.LazyFrame:
         .with_columns(
             pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio"),
             pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio"),
+            pl.col("email").is_in(get_members_email()).fill_null(value=False).alias("member"),
             # Only allow 1 preference if the second preference is not the same class as the first
             (
                 pl.col("only_1")
@@ -240,6 +257,7 @@ def create_attendance_sheet(
         .select(
             pl.col("name").alias("Name"),
             pl.col("handle").alias("Handle"),
+            pl.col("member").alias("Member"),
         )
         .with_columns(pl.lit(value=None).alias(keys) for keys in ATTENDANCE_WEEKS)
         .write_excel(
