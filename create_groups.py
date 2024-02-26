@@ -52,6 +52,7 @@ GROUPS_MAP = {
     "Bachata Level 1": "B1",
     "Bachata Level 2": "B2",
 }
+GROUP_LABELS = {v: k for k, v in GROUPS_MAP.items()}
 GROUPS = list(
     itertools.chain(
         (group + "L" for group in GROUPS_MAP.values()),
@@ -210,9 +211,6 @@ def print_gmail_emails(lf: pl.LazyFrame) -> None:
 
 def create_group_excel_file(df: pl.DataFrame) -> None:
     """Create an excel file with all the final group divisions."""
-    # We need the name for each of the short version labels
-    group_labels = {v: k for k, v in GROUPS_MAP.items()}
-
     with Workbook("groups.xlsx") as workbook:
         for group in GROUPS_MAP.values():
             leaders = (
@@ -227,10 +225,35 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
             )
             pl.concat((leaders, followers), how="horizontal").write_excel(
                 workbook=workbook,
-                worksheet=group_labels[group],
+                worksheet=GROUP_LABELS[group],
                 autofit=True,
                 header_format={"bold": True},
             )
+
+
+def create_attendance_sheet(
+    df: pl.DataFrame,
+    workbook: Workbook,
+    group: str,
+    role: str,
+) -> None:
+    """Create one sheet in the attendance workbook."""
+    role_letter = role[0].upper()
+    (
+        df.filter(pl.col(group + role_letter).is_not_null())
+        .sort(group + role_letter)
+        .select(
+            pl.col("name").alias("Name"),
+            pl.col("handle").alias("Handle"),
+        )
+        .with_columns(pl.lit(value=None).alias(keys) for keys in list(ATTENDANCE_COLUMNS)[1:])
+        .write_excel(
+            workbook=workbook,
+            worksheet=GROUP_LABELS[group] + " " + role,
+            autofit=True,
+            header_format={"bold": True},
+        )
+    )
 
 
 def main() -> None:
@@ -266,6 +289,11 @@ def main() -> None:
     print(str(df))
     df.write_csv(OUTPUT_PATH)
     create_group_excel_file(df)
+
+    with Workbook("attendance.xlsx") as workbook:
+        for group in GROUPS_MAP.values():
+            create_attendance_sheet(df, workbook, group, "Leader")
+            create_attendance_sheet(df, workbook, group, "Follower")
 
 
 if __name__ == "__main__":
