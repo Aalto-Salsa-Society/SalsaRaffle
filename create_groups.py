@@ -65,16 +65,11 @@ ATTENDANCE_COLUMNS = {"Handle": "handle", **ATTENDANCE_WEEKS}
 
 def get_members_email() -> pl.Series:
     """Return a list of ASS members."""
-    if "members.csv" not in os.listdir():
-        logging.warning("No attendance list found")
+    if "Members.xlsx" not in os.listdir():
+        logging.warning("No members list found")
         return pl.Series(dtype=pl.Utf8)
 
-    return (
-        pl.scan_csv("members.csv")
-        .select(pl.col("Email address"))
-        .collect()
-        .get_column("Email address")
-    )
+    return pl.read_excel("Members.xlsx").get_column("Email address")
 
 
 def get_high_priority() -> pl.Series:
@@ -161,7 +156,9 @@ def get_class_registrations() -> pl.LazyFrame:
     (see GROUPS_MAP for the full list of groups)
     """
     return (
-        pl.scan_csv("responses.csv")
+        pl.read_excel("responses.xlsx")
+        .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
+        .lazy()
         .select(REGISTRATION_COLUMNS)
         .rename(REGISTRATION_COLUMNS)
         .drop_nulls("1")
@@ -191,10 +188,6 @@ def get_class_registrations() -> pl.LazyFrame:
             (~pl.col("high_prio") & ~pl.col("low_prio")).alias("med_prio"),
         )
         .with_columns(pl.lit(value=None).alias(group) for group in ALL_GROUPS)
-        .collect()
-        # Sample only works on a DataFrame, not a LazyFrame
-        .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
-        .lazy()
     )
 
 
