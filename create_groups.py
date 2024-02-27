@@ -22,7 +22,7 @@ REGISTRATION_COLUMNS = {
     "First preference dance role": "1_role",
     "Second preference": "2",
     "Second preference dance role": "2_role",
-    "first_only": "only_1",
+    "Both preferences": "only_1",
 }
 
 
