@@ -72,6 +72,15 @@ def get_members_email() -> pl.Series:
     return pl.read_excel("Members.xlsx").filter("Approved").get_column("Email address")
 
 
+def get_paid_members_email() -> pl.Series:
+    """Return a list of ASS members that paid."""
+    if "Members.xlsx" not in os.listdir():
+        logging.warning("No members list found")
+        return pl.Series(dtype=pl.Utf8)
+
+    return pl.read_excel("Members.xlsx").filter("Paid").get_column("Email address")
+
+
 def get_high_priority() -> pl.Series:
     """Return a list of people who were left out last cycle (manually created)."""
     if "high_prio.csv" not in os.listdir():
@@ -143,6 +152,8 @@ def get_class_registrations() -> pl.LazyFrame:
         The person is low priority (cannot be high priority)
     member: bool
         The person is a member
+    paid: bool
+        The person is a paid member
     1: str (e.g. S1MF, S2L, B2L)
         First preference
     2: str (e.g. S1TL, S2F, B2L)
@@ -174,6 +185,7 @@ def get_class_registrations() -> pl.LazyFrame:
             pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio"),
             pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio"),
             pl.col("email").is_in(get_members_email()).fill_null(value=False).alias("member"),
+            pl.col("email").is_in(get_paid_members_email()).fill_null(value=False).alias("paid"),
             # Only allow 1 preference if the second preference is not the same class as the first
             (
                 pl.col("only_1")
@@ -252,6 +264,7 @@ def create_attendance_sheet(
             pl.col("name").alias("Name"),
             pl.col("handle").alias("Handle"),
             pl.col("member").alias("Member"),
+            pl.col("paid").alias("Paid"),
         )
         .with_columns(pl.lit(value=None).alias(keys) for keys in ATTENDANCE_WEEKS)
         .write_excel(
