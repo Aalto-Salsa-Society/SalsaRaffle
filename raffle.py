@@ -106,6 +106,8 @@ def get_low_priority() -> pl.Series:
         return pl.Series(dtype=pl.Utf8)
 
     all_sheets = pl.read_excel("attendance_prev.xlsx", sheet_id=0)
+    no_show = pl.col(ATTENDANCE_WEEKS.values()).eq_missing("No show")
+    gave_notice = pl.col(ATTENDANCE_WEEKS.values()).eq_missing("Gave notice")
     return (
         pl.concat(all_sheets.values())
         .lazy()
@@ -114,14 +116,8 @@ def get_low_priority() -> pl.Series:
         .drop_nulls("handle")
         .with_columns(
             pl.col("handle").str.to_lowercase(),
-            pl.any_horizontal(pl.col(ATTENDANCE_WEEKS.values()).eq_missing("No show")).alias(
-                "no_show"
-            ),
-            (
-                pl.sum_horizontal(pl.col(ATTENDANCE_WEEKS.values()).eq_missing("Gave notice"))
-                .ge(2)
-                .alias("gave_notice")
-            ),
+            pl.any_horizontal(no_show).alias("no_show"),
+            pl.sum_horizontal(gave_notice).ge(2).alias("gave_notice"),
         )
         .filter(pl.col("no_show") | pl.col("gave_notice"))
         .select("handle")
