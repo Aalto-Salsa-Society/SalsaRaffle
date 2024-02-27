@@ -69,7 +69,7 @@ def get_members_email() -> pl.Series:
         logging.warning("No members list found")
         return pl.Series(dtype=pl.Utf8)
 
-    return pl.read_excel("Members.xlsx").get_column("Email address")
+    return pl.read_excel("Members.xlsx").filter("Approved").get_column("Email address")
 
 
 def get_high_priority() -> pl.Series:
