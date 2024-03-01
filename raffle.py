@@ -281,22 +281,26 @@ def main() -> None:
     # Required due to Kleene's logic
     rejected = pl.any_horizontal(pl.col(ALL_GROUPS).gt(MAX_PER_GROUP))
 
-    # Assign high priority first preference
-    lf = assign(lf, lambda group: pl.col("1").eq(group) & pl.col("high_prio"))
-    # Assign high priority second preference that are not in first preference
-    lf = assign(lf, lambda group: pl.col("2").eq(group) & pl.col("high_prio") & rejected)
-    # Assign medium priority first preference
-    lf = assign(lf, lambda group: pl.col("1").eq(group) & pl.col("med_prio"))
-    # Assign medium priority second preference that are not in first preference
-    lf = assign(lf, lambda group: pl.col("2").eq(group) & pl.col("med_prio") & rejected)
-    # Assign med and high priority (not low) second preference that want to join more than 1 class
-    lf = assign(lf, lambda group: pl.col("2").eq(group) & ~pl.col("low_prio") & ~pl.col("only_1"))
-    # Assign all low priority first preference
-    lf = assign(lf, lambda group: pl.col("1").eq(group) & pl.col("low_prio"))
-    # Assign all low priority second preference that are not in first preference
-    lf = assign(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & rejected)
-    # Assign all low priority second preference that want to join more than 1 class
-    lf = assign(lf, lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"))
+    assignments = [
+        # High priority first preference
+        lambda group: pl.col("1").eq(group) & pl.col("high_prio"),
+        # High priority second preference that are not in first preference
+        lambda group: pl.col("2").eq(group) & pl.col("high_prio") & rejected,
+        # Medium priority first preference
+        lambda group: pl.col("1").eq(group) & pl.col("med_prio"),
+        # Medium priority second preference that are not in first preference
+        lambda group: pl.col("2").eq(group) & pl.col("med_prio") & rejected,
+        # Med and high priority (not low) second preference that want to join more than 1 class
+        lambda group: pl.col("2").eq(group) & ~pl.col("low_prio") & ~pl.col("only_1"),
+        # All low priority first preference
+        lambda group: pl.col("1").eq(group) & pl.col("low_prio"),
+        # All low priority second preference that are not in first preference
+        lambda group: pl.col("2").eq(group) & pl.col("low_prio") & rejected,
+        # All low priority second preference that want to join more than 1 class
+        lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"),
+    ]
+    for assign_rule in assignments:
+        lf = assign(lf, assign_rule)
 
     # Create desired outputs
     print_gmail_emails(lf.filter(accepted))
