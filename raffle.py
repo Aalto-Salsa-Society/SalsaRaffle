@@ -174,10 +174,11 @@ def get_class_registrations() -> pl.LazyFrame:
     """
     return (
         pl.read_excel("responses.xlsx")
-        .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
-        .lazy()
         .select(REGISTRATION_COLUMNS)
         .rename(REGISTRATION_COLUMNS)
+        .unique(subset="handle", keep="last", maintain_order=True)
+        .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
+        .lazy()
         .drop_nulls("1")
         .with_columns(
             # Salsa Level 1, Follower -> S1F
