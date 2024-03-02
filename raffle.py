@@ -4,8 +4,9 @@
 import enum
 import itertools
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Final
+from typing import Final
 
 import polars as pl
 from polars.type_aliases import IntoExprColumn
@@ -156,22 +157,16 @@ class Timeslot(enum.IntEnum):
     THURSDAY = enum.auto()
 
 
-GROUP_TO_TIMESLOT: Final = {
-    "Salsa Level 1": Timeslot.THURSDAY,
-    "Salsa Level 2": Timeslot.MONDAY,
-    "Salsa Level 3": Timeslot.MONDAY,
-    "Salsa Level 4": Timeslot.THURSDAY,
-    "Bachata Level 1": Timeslot.TUESDAY_1,
-    "Bachata Level 2": Timeslot.TUESDAY_2,
+GROUP_INFO: Final[dict[str, tuple[str, Timeslot]]] = {
+    "Salsa Level 1": ("S1", Timeslot.THURSDAY),
+    "Salsa Level 2": ("S2", Timeslot.MONDAY),
+    "Salsa Level 3": ("S3", Timeslot.MONDAY),
+    "Salsa Level 4": ("S4", Timeslot.THURSDAY),
+    "Bachata Level 1": ("B1", Timeslot.TUESDAY_1),
+    "Bachata Level 2": ("B2", Timeslot.TUESDAY_2),
 }
-GROUP_TO_LABEL: Final = {
-    "Salsa Level 1": "S1",
-    "Salsa Level 2": "S2",
-    "Salsa Level 3": "S3",
-    "Salsa Level 4": "S4",
-    "Bachata Level 1": "B1",
-    "Bachata Level 2": "B2",
-}
+GROUP_TO_TIMESLOT: Final = {group: timeslot for group, (_, timeslot) in GROUP_INFO.items()}
+GROUP_TO_LABEL: Final = {group: label for group, (label, _) in GROUP_INFO.items()}
 LABEL_TO_GROUP: Final = {v: k for k, v in GROUP_TO_LABEL.items()}
 ALL_GROUPS: Final = [
     group + role
