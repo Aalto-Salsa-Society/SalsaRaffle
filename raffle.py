@@ -249,20 +249,20 @@ def print_gmail_emails(lf: pl.LazyFrame) -> None:
 def create_group_excel_file(df: pl.DataFrame) -> None:
     """Create an excel file with all the final group divisions."""
     with Workbook(GROUPS_FILE) as workbook:
-        for group in GROUP_TO_LABEL.values():
+        for group_label in GROUP_TO_LABEL.values():
             leaders = (
-                df.filter(pl.col(group + "L").is_not_null())
-                .sort(group + "L")
+                df.filter(pl.col(group_label + "L").is_not_null())
+                .sort(group_label + "L")
                 .select(pl.col("name").alias("Leader Name"))
             )
             followers = (
-                df.filter(pl.col(group + "F").is_not_null())
-                .sort(group + "F")
+                df.filter(pl.col(group_label + "F").is_not_null())
+                .sort(group_label + "F")
                 .select(pl.col("name").alias("Follower Name"))
             )
             pl.concat((leaders, followers), how="horizontal").write_excel(
                 workbook=workbook,
-                worksheet=LABEL_TO_GROUP[group],
+                worksheet=LABEL_TO_GROUP[group_label],
                 autofit=True,
                 header_format={"bold": True},
             )
@@ -271,14 +271,14 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
 def create_attendance_sheet(
     df: pl.DataFrame,
     workbook: Workbook,
-    group: str,
+    group_label: str,
     role: str,
 ) -> None:
     """Create one sheet in the attendance workbook."""
     role_letter = role[0].upper()
     (
-        df.filter(pl.col(group + role_letter).is_not_null())
-        .sort(group + role_letter)
+        df.filter(pl.col(group_label + role_letter).is_not_null())
+        .sort(group_label + role_letter)
         .select(
             pl.col("name").alias("Name"),
             pl.col("handle").alias("Handle"),
@@ -288,7 +288,7 @@ def create_attendance_sheet(
         .with_columns(pl.lit(value=None).alias(keys) for keys in ATTENDANCE_WEEKS)
         .write_excel(
             workbook=workbook,
-            worksheet=LABEL_TO_GROUP[group] + " " + role,
+            worksheet=LABEL_TO_GROUP[group_label] + " " + role,
             autofit=True,
             header_format={"bold": True},
         )
