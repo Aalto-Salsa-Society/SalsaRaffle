@@ -11,10 +11,10 @@ import polars as pl
 from xlsxwriter import Workbook
 
 # A seed for reproducible but random results
-RANDOM_SEED = 455
-MAX_PER_GROUP = 15
+RANDOM_SEED: Final[int] = 455
+MAX_PER_GROUP: Final[int] = 15
 
-REGISTRATION_COLUMNS = {
+REGISTRATION_COLUMNS: Final = {
     "Telegram handle": "handle",
     "Full name (first and last name)": "name",
     "Email address": "email",
@@ -35,7 +35,7 @@ class Timeslot(enum.IntEnum):
     THURSDAY = enum.auto()
 
 
-GROUP_TO_TIMESLOT = {
+GROUP_TO_TIMESLOT: Final = {
     "Salsa Level 1": Timeslot.THURSDAY,
     "Salsa Level 2": Timeslot.MONDAY,
     "Salsa Level 3": Timeslot.MONDAY,
@@ -43,7 +43,7 @@ GROUP_TO_TIMESLOT = {
     "Bachata Level 1": Timeslot.TUESDAY_1,
     "Bachata Level 2": Timeslot.TUESDAY_2,
 }
-GROUP_TO_LABEL = {
+GROUP_TO_LABEL: Final = {
     "Salsa Level 1": "S1",
     "Salsa Level 2": "S2",
     "Salsa Level 3": "S3",
@@ -51,16 +51,19 @@ GROUP_TO_LABEL = {
     "Bachata Level 1": "B1",
     "Bachata Level 2": "B2",
 }
-LABEL_TO_GROUP = {v: k for k, v in GROUP_TO_LABEL.items()}
-ALL_GROUPS = [g + r for g, r in itertools.product(GROUP_TO_LABEL.values(), ("L", "F"))]
+LABEL_TO_GROUP: Final = {v: k for k, v in GROUP_TO_LABEL.items()}
+ALL_GROUPS: Final = [
+    group + role for group, role in itertools.product(GROUP_TO_LABEL.values(), ("L", "F"))
+]
 
-ATTENDANCE_WEEKS = {
+ATTENDANCE_WEEKS: Final = {
     "Week 1": "week1",
     "Week 2": "week2",
     "Week 3": "week3",
     "Week 4": "week4",
 }
-ATTENDANCE_COLUMNS = {"Handle": "handle", **ATTENDANCE_WEEKS}
+ATTENDANCE_COLUMNS: Final = {"Handle": "handle", **ATTENDANCE_WEEKS}
+
 HIGH_PRIORITY_FILE: Final[Path] = Path("high_prio.csv")
 MEMBERS_FILE: Final[Path] = Path("Members.xlsx")
 OLD_ATTENDANCE_FILE: Final[Path] = Path("attendance_prev.xlsx")
