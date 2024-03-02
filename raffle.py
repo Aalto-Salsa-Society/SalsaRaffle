@@ -69,7 +69,12 @@ def get_members_email() -> pl.Series:
         logging.warning("No members list found")
         return pl.Series(dtype=pl.Utf8)
 
-    return pl.read_excel("Members.xlsx").filter("Approved").get_column("Email address")
+    return (
+        pl.read_excel("Members.xlsx")
+        .filter("Approved")
+        .with_columns(pl.col("Email address").str.to_lowercase())
+        .get_column("Email address")
+    )
 
 
 def get_paid_members_email() -> pl.Series:
@@ -78,7 +83,12 @@ def get_paid_members_email() -> pl.Series:
         logging.warning("No members list found")
         return pl.Series(dtype=pl.Utf8)
 
-    return pl.read_excel("Members.xlsx").filter("Paid").get_column("Email address")
+    return (
+        pl.read_excel("Members.xlsx")
+        .filter("Paid")
+        .with_columns(pl.col("Email address").str.to_lowercase())
+        .get_column("Email address")
+    )
 
 
 def get_high_priority() -> pl.Series:
@@ -174,6 +184,7 @@ def get_class_registrations() -> pl.LazyFrame:
             pl.col("1").map_dict(GROUP_TO_LABEL) + pl.col("1_role").str.slice(0, length=1),
             pl.col("2").map_dict(GROUP_TO_LABEL) + pl.col("2_role").str.slice(0, length=1),
             pl.col("handle").str.to_lowercase(),
+            pl.col("email").str.to_lowercase(),
             pl.col("1").map_dict(GROUP_TO_TIMESLOT).alias("timeslot_1"),
             pl.col("2").map_dict(GROUP_TO_TIMESLOT).alias("timeslot_2"),
         )
