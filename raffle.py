@@ -12,18 +12,138 @@ from polars.type_aliases import IntoExprColumn
 from xlsxwriter import Workbook
 
 # A seed for reproducible but random results
-RANDOM_SEED: Final[int] = 455
-MAX_PER_GROUP: Final[int] = 15
+RANDOM_SEED: Final = 455
+MAX_PER_GROUP: Final = 15
+
+LEADER_LABEL: Final = "L"
+FOLLOWER_LABEL: Final = "F"
+LEADER: Final = "Leader"
+FOLLOWER: Final = "Follower"
+ROLE_TO_LABEL: Final = {LEADER: LEADER_LABEL, FOLLOWER: FOLLOWER_LABEL}
+
+
+class Col(enum.StrEnum):
+    """All columns used or created."""
+
+    HANDLE = "handle"
+    NAME = "name"
+    EMAIL = "email"
+    P1 = "first_preference"
+    P1_ROLE = "first_preference_role"
+    P2 = "second_preference"
+    P2_ROLE = "second_preference_role"
+    ONLY_1 = "only_1_preference"
+    TIMESLOT_1 = "timeslot_1"
+    TIMESLOT_2 = "timeslot_2"
+    HIGH_PRIO = "high_priority"
+    MED_PRIO = "medium_priority"
+    LOW_PRIO = "low_priority"
+    MEMBER = "member"
+    PAID = "paid"
+
+
+# Required files
+HIGH_PRIORITY_FILE: Final = Path("high_prio.csv")
+MEMBERS_FILE: Final = Path("Members.xlsx")
+OLD_ATTENDANCE_FILE: Final = Path("attendance_prev.xlsx")
+RESPONSE_FILE: Final = Path("responses.xlsx")
+
+# Created files
+GROUPS_FILE: Final = Path("groups.xlsx")
+NEW_ATTENDANCE_FILE: Final = Path("attendance.xlsx")
+RAW_GROUPS_FILE: Final = Path("groups.csv")
+
+
+MEMBER_COLUMNS: Final = {
+    "Email address": Col.EMAIL.value,
+    "Paid": Col.PAID.value,
+}
+
+
+def get_members_email(condition: IntoExprColumn = "Approved") -> pl.Series:
+    """Return a list of ASS members."""
+    if not MEMBERS_FILE.exists():
+        logging.warning("No members list found")
+        return pl.Series(dtype=pl.Utf8)
+
+    return (
+        pl.read_excel(MEMBERS_FILE)
+        .rename(MEMBER_COLUMNS)
+        .filter(condition)
+        .with_columns(pl.col(Col.EMAIL).str.to_lowercase())
+        .get_column(Col.EMAIL)
+    )
+
+
+def get_high_priority() -> pl.Series:
+    """
+    Return a list of people who were left out last cycle.
+
+    This list is manually created.
+    """
+    if not HIGH_PRIORITY_FILE.exists():
+        logging.warning("No high priority list found")
+        return pl.Series(dtype=pl.Utf8)
+
+    return (
+        pl.scan_csv(HIGH_PRIORITY_FILE)
+        .with_columns(pl.col(Col.HANDLE).str.to_lowercase())
+        .collect()
+        .get_column(Col.HANDLE)
+    )
+
+
+NO_SHOW: Final = "no_show"
+GAVE_NOTICE: Final = "gave_notice"
+ATTENDANCE_WEEKS: Final = {
+    "Week 1": "week1",
+    "Week 2": "week2",
+    "Week 3": "week3",
+    "Week 4": "week4",
+}
+ATTENDANCE_COLUMNS: Final = {"Handle": Col.HANDLE.value, **ATTENDANCE_WEEKS}
+
+
+def get_low_priority() -> pl.Series:
+    """
+    Return a list of people who are considered a disruption.
+
+    Members with a "No show" or 2 "Gave notice" are considered a disruption.
+    """
+    if not OLD_ATTENDANCE_FILE.exists():
+        logging.warning("No attendance file found")
+        return pl.Series(dtype=pl.Utf8)
+
+    all_sheets = pl.read_excel(OLD_ATTENDANCE_FILE, sheet_id=0)
+    no_show = pl.col(ATTENDANCE_WEEKS.values()).eq_missing("No show")
+    gave_notice = pl.col(ATTENDANCE_WEEKS.values()).eq_missing("Gave notice")
+    return (
+        pl.concat(all_sheets.values())
+        .lazy()
+        .select(ATTENDANCE_COLUMNS)
+        .rename(ATTENDANCE_COLUMNS)
+        .drop_nulls(Col.HANDLE)
+        .with_columns(
+            pl.col(Col.HANDLE).str.to_lowercase(),
+            pl.any_horizontal(no_show).alias(NO_SHOW),
+            pl.sum_horizontal(gave_notice).ge(2).alias(GAVE_NOTICE),
+        )
+        .filter(pl.col(NO_SHOW) | pl.col(GAVE_NOTICE))
+        .select(Col.HANDLE)
+        .collect()
+        .get_column(Col.HANDLE)
+    )
+
 
 REGISTRATION_COLUMNS: Final = {
-    "Telegram handle": "handle",
-    "Full name (first and last name)": "name",
-    "Email address": "email",
-    "First preference": "1",
-    "First preference dance role": "1_role",
-    "Second preference": "2",
-    "Second preference dance role": "2_role",
-    "Both preferences": "only_1",
+    "Telegram handle": Col.HANDLE.value,
+    "Full name (first and last name)": Col.NAME.value,
+    "Email address": Col.EMAIL.value,
+    "First preference": Col.P1.value,
+    "First preference dance role": Col.P1_ROLE.value,
+    "Second preference": Col.P2.value,
+    "Second preference dance role": Col.P2_ROLE.value,
+    "Both preferences": Col.ONLY_1.value,
 }
 
 
@@ -54,156 +174,58 @@ GROUP_TO_LABEL: Final = {
 }
 LABEL_TO_GROUP: Final = {v: k for k, v in GROUP_TO_LABEL.items()}
 ALL_GROUPS: Final = [
-    group + role for group, role in itertools.product(GROUP_TO_LABEL.values(), ("L", "F"))
+    group + role
+    for group, role in itertools.product(
+        GROUP_TO_LABEL.values(),
+        (LEADER_LABEL, FOLLOWER_LABEL),
+    )
 ]
-
-ATTENDANCE_WEEKS: Final = {
-    "Week 1": "week1",
-    "Week 2": "week2",
-    "Week 3": "week3",
-    "Week 4": "week4",
-}
-ATTENDANCE_COLUMNS: Final = {"Handle": "handle", **ATTENDANCE_WEEKS}
-
-HIGH_PRIORITY_FILE: Final[Path] = Path("high_prio.csv")
-MEMBERS_FILE: Final[Path] = Path("Members.xlsx")
-OLD_ATTENDANCE_FILE: Final[Path] = Path("attendance_prev.xlsx")
-RESPONSE_FILE: Final[Path] = Path("responses.xlsx")
-
-GROUPS_FILE: Final[Path] = Path("groups.xlsx")
-NEW_ATTENDANCE_FILE: Final[Path] = Path("attendance.xlsx")
-RAW_GROUPS_FILE: Final[Path] = Path("groups.csv")
-
-
-def get_members_email(condition: IntoExprColumn = "Approved") -> pl.Series:
-    """Return a list of ASS members."""
-    if not MEMBERS_FILE.exists():
-        logging.warning("No members list found")
-        return pl.Series(dtype=pl.Utf8)
-
-    return (
-        pl.read_excel(MEMBERS_FILE)
-        .filter(condition)
-        .with_columns(pl.col("Email address").str.to_lowercase())
-        .get_column("Email address")
-    )
-
-
-def get_high_priority() -> pl.Series:
-    """Return a list of people who were left out last cycle (manually created)."""
-    if not HIGH_PRIORITY_FILE.exists():
-        logging.warning("No high priority list found")
-        return pl.Series(dtype=pl.Utf8)
-
-    return (
-        pl.scan_csv(HIGH_PRIORITY_FILE)
-        .with_columns(pl.col("handle").str.to_lowercase())
-        .collect()
-        .get_column("handle")
-    )
-
-
-def get_low_priority() -> pl.Series:
-    """
-    Return a list of people who are considered a disruption.
-
-    Members with a "No show" or 2 "Gave notice" are considered a disruption.
-    """
-    if not OLD_ATTENDANCE_FILE.exists():
-        logging.warning("No attendance file found")
-        return pl.Series(dtype=pl.Utf8)
-
-    all_sheets = pl.read_excel(OLD_ATTENDANCE_FILE, sheet_id=0)
-    no_show = pl.col(ATTENDANCE_WEEKS.values()).eq_missing("No show")
-    gave_notice = pl.col(ATTENDANCE_WEEKS.values()).eq_missing("Gave notice")
-    return (
-        pl.concat(all_sheets.values())
-        .lazy()
-        .select(ATTENDANCE_COLUMNS)
-        .rename(ATTENDANCE_COLUMNS)
-        .drop_nulls("handle")
-        .with_columns(
-            pl.col("handle").str.to_lowercase(),
-            pl.any_horizontal(no_show).alias("no_show"),
-            pl.sum_horizontal(gave_notice).ge(2).alias("gave_notice"),
-        )
-        .filter(pl.col("no_show") | pl.col("gave_notice"))
-        .select("handle")
-        .collect()
-        .get_column("handle")
-    )
 
 
 def get_class_registrations() -> pl.LazyFrame:
     """
-    Load the initial data from the signup responses and creates the initial dataframe.
+    Load the data from the signup responses and creates the initial dataframe.
 
     :return: Initial dataframe
 
     Columns
     -------
-    handle: str
-        Telegram handle
-    name: str
-        Full name (in lower case)
-    email: str
-        Email address
-    high_prio: bool
-        The person is high priority
-    med_prio: bool
-        The person is medium priority (not high, nor low priority)
-    low_prio: bool
-        The person is low priority (cannot be high priority)
-    member: bool
-        The person is a member
-    paid: bool
-        The person is a paid member
-    1: str (e.g. S1MF, S2L, B2L)
-        First preference
-    2: str (e.g. S1TL, S2F, B2L)
-        Second preference
-    only_1: bool
-        The person only wants to join first preference
-    S1MF: int
-        Position in queue for the S1MF group (Salsa Level 1 M (Monday) Follower)
+    The columns are the columns found in the `Col` enum together with a column
+    for each group. The groups can be found in the `ALL_GROUPS` list. Example:
+    S1F: int
+        Position in queue for the S1MF group (Salsa Level 1 Follower)
     B2L: int
         Position in queue for the B2L group (Bachata Level 2 Leader)
-    (see GROUPS_MAP for the full list of groups)
     """
     return (
         pl.read_excel(RESPONSE_FILE)
         .select(REGISTRATION_COLUMNS)
         .rename(REGISTRATION_COLUMNS)
-        .unique(subset="handle", keep="last", maintain_order=True)
+        .unique(subset=Col.HANDLE, keep="last", maintain_order=True)
         .sample(fraction=1, shuffle=True, seed=RANDOM_SEED)
         .lazy()
-        .drop_nulls("1")
+        .drop_nulls(Col.P1)
         .with_columns(
             # Salsa Level 1, Follower -> S1F
-            pl.col("1").map_dict(GROUP_TO_LABEL) + pl.col("1_role").str.slice(0, length=1),
-            pl.col("2").map_dict(GROUP_TO_LABEL) + pl.col("2_role").str.slice(0, length=1),
-            pl.col("handle").str.to_lowercase(),
-            pl.col("email").str.to_lowercase(),
-            pl.col("1").map_dict(GROUP_TO_TIMESLOT).alias("timeslot_1"),
-            pl.col("2").map_dict(GROUP_TO_TIMESLOT).alias("timeslot_2"),
+            pl.col(Col.P1).map_dict(GROUP_TO_LABEL) + pl.col(Col.P1_ROLE).str.slice(0, length=1),
+            pl.col(Col.P2).map_dict(GROUP_TO_LABEL) + pl.col(Col.P2_ROLE).str.slice(0, length=1),
+            pl.col(Col.HANDLE).str.to_lowercase(),
+            pl.col(Col.EMAIL).str.to_lowercase(),
+            pl.col(Col.P1).map_dict(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_1),
+            pl.col(Col.P2).map_dict(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_2),
         )
         .with_columns(
-            pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio"),
-            pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio"),
-            pl.col("email").is_in(get_members_email()).fill_null(value=False).alias("member"),
-            pl.col("email").is_in(get_members_email("Paid")).fill_null(value=False).alias("paid"),
+            pl.col(Col.HANDLE).is_in(get_high_priority()).fill_null(value=False).alias(Col.HIGH_PRIO),
+            pl.col(Col.HANDLE).is_in(get_low_priority()).fill_null(value=False).alias(Col.LOW_PRIO),
+            pl.col(Col.EMAIL).is_in(get_members_email()).fill_null(value=False).alias(Col.MEMBER),
+            pl.col(Col.EMAIL).is_in(get_members_email(Col.PAID)).fill_null(value=False).alias(Col.PAID),
             # Only allow 1 preference if the second preference is not the same class as the first
-            (
-                pl.col("only_1")
-                .is_null()
-                .or_(pl.col("timeslot_1").eq(pl.col("timeslot_2")))
-                .alias("only_1")
-            ),
+            (pl.col(Col.ONLY_1).is_null() | pl.col(Col.TIMESLOT_1).eq(pl.col(Col.TIMESLOT_2))).alias(Col.ONLY_1),
         )
         .with_columns(
             # Remove high priority if they already have low priority
-            pl.col("high_prio") & ~pl.col("low_prio"),
-            (~pl.col("high_prio") & ~pl.col("low_prio")).alias("med_prio"),
+            (pl.col(Col.HIGH_PRIO) & ~pl.col(Col.LOW_PRIO)).alias(Col.HIGH_PRIO),
+            (~pl.col(Col.HIGH_PRIO) & ~pl.col(Col.LOW_PRIO)).alias(Col.MED_PRIO),
         )
         .with_columns(pl.lit(value=None).alias(group) for group in ALL_GROUPS)
     )
@@ -213,8 +235,11 @@ def assign(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFr
     """Assign a spot in all groups according to the assign_rule."""
     for group in ALL_GROUPS:
         assignees = assign_rule(group) & pl.col(group).is_null()
+        # fmt: off
         starting_point = (
-            pl.when(pl.col(group).max().is_null()).then(0).otherwise(pl.col(group).max())
+            pl.when(pl.col(group).max().is_null())
+            .then(0)
+            .otherwise(pl.col(group).max())
         )
         lf = lf.with_columns(
             pl.when(assignees)
@@ -222,13 +247,14 @@ def assign(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFr
             .otherwise(pl.col(group))
             .alias(group)
         )
+        # fmt: on
 
     return lf
 
 
 def print_gmail_emails(lf: pl.LazyFrame) -> None:
     """Print the emails of the people that have been accepted."""
-    emails = lf.unique().collect().get_column("email").to_list()
+    emails = lf.unique().collect().get_column(Col.EMAIL).to_list()
     print(f"Accepted emails {len(emails)}:")
     print(*emails, sep=", ")
 
@@ -238,14 +264,14 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
     with Workbook(GROUPS_FILE) as workbook:
         for group_label in GROUP_TO_LABEL.values():
             leaders = (
-                df.filter(pl.col(group_label + "L").is_not_null())
-                .sort(group_label + "L")
-                .select(pl.col("name").alias("Leader Name"))
+                df.filter(pl.col(group_label + LEADER_LABEL).is_not_null())
+                .sort(group_label + LEADER_LABEL)
+                .select(pl.col(Col.NAME).alias(LEADER + " Name"))
             )
             followers = (
-                df.filter(pl.col(group_label + "F").is_not_null())
-                .sort(group_label + "F")
-                .select(pl.col("name").alias("Follower Name"))
+                df.filter(pl.col(group_label + FOLLOWER_LABEL).is_not_null())
+                .sort(group_label + FOLLOWER_LABEL)
+                .select(pl.col(Col.NAME).alias(FOLLOWER + " Name"))
             )
             pl.concat((leaders, followers), how="horizontal").write_excel(
                 workbook=workbook,
@@ -262,15 +288,14 @@ def create_attendance_sheet(
     role: str,
 ) -> None:
     """Create one sheet in the attendance workbook."""
-    role_letter = role[0].upper()
     (
-        df.filter(pl.col(group_label + role_letter).is_not_null())
-        .sort(group_label + role_letter)
+        df.filter(pl.col(group_label + ROLE_TO_LABEL[role]).is_not_null())
+        .sort(group_label + ROLE_TO_LABEL[role])
         .select(
-            pl.col("name").alias("Name"),
-            pl.col("handle").alias("Handle"),
-            pl.col("member").alias("Member"),
-            pl.col("paid").alias("Paid"),
+            pl.col(Col.NAME).alias("Name"),
+            pl.col(Col.HANDLE).alias("Handle"),
+            pl.col(Col.MEMBER).alias("Member"),
+            pl.col(Col.PAID).alias("Paid"),
         )
         .with_columns(pl.lit(value=None).alias(keys) for keys in ATTENDANCE_WEEKS)
         .write_excel(
@@ -293,21 +318,21 @@ def main() -> None:
 
     assignments = [
         # High priority first preference
-        lambda group: pl.col("1").eq(group) & pl.col("high_prio"),
+        lambda group: pl.col(Col.P1).eq(group) & pl.col(Col.HIGH_PRIO),
         # High priority second preference that are not in first preference
-        lambda group: pl.col("2").eq(group) & pl.col("high_prio") & rejected,
+        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.HIGH_PRIO) & rejected,
         # Medium priority first preference
-        lambda group: pl.col("1").eq(group) & pl.col("med_prio"),
+        lambda group: pl.col(Col.P1).eq(group) & pl.col(Col.MED_PRIO),
         # Medium priority second preference that are not in first preference
-        lambda group: pl.col("2").eq(group) & pl.col("med_prio") & rejected,
+        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.MED_PRIO) & rejected,
         # Med and high priority (not low) second preference that want to join more than 1 class
-        lambda group: pl.col("2").eq(group) & ~pl.col("low_prio") & ~pl.col("only_1"),
+        lambda group: pl.col(Col.P2).eq(group) & ~pl.col(Col.LOW_PRIO) & ~pl.col(Col.ONLY_1),
         # All low priority first preference
-        lambda group: pl.col("1").eq(group) & pl.col("low_prio"),
+        lambda group: pl.col(Col.P1).eq(group) & pl.col(Col.LOW_PRIO),
         # All low priority second preference that are not in first preference
-        lambda group: pl.col("2").eq(group) & pl.col("low_prio") & rejected,
+        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.LOW_PRIO) & rejected,
         # All low priority second preference that want to join more than 1 class
-        lambda group: pl.col("2").eq(group) & pl.col("low_prio") & ~pl.col("only_1"),
+        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.LOW_PRIO) & ~pl.col(Col.ONLY_1),
     ]
     for assign_rule in assignments:
         lf = assign(lf, assign_rule)
@@ -315,15 +340,15 @@ def main() -> None:
     # Create desired outputs
     print_gmail_emails(lf.filter(accepted))
 
-    df = lf.drop("email").collect()
+    df = lf.drop(Col.EMAIL).collect()
     print(str(df))
     df.write_csv(RAW_GROUPS_FILE)
     create_group_excel_file(df)
 
     with Workbook(NEW_ATTENDANCE_FILE) as workbook:
         for group in GROUP_TO_LABEL.values():
-            create_attendance_sheet(df, workbook, group, "Leader")
-            create_attendance_sheet(df, workbook, group, "Follower")
+            create_attendance_sheet(df, workbook, group, LEADER)
+            create_attendance_sheet(df, workbook, group, FOLLOWER)
 
 
 if __name__ == "__main__":
