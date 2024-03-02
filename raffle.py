@@ -4,8 +4,8 @@
 import enum
 import itertools
 import logging
-import os
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Final
 
 import polars as pl
 from xlsxwriter import Workbook
@@ -61,16 +61,24 @@ ATTENDANCE_WEEKS = {
     "Week 4": "week4",
 }
 ATTENDANCE_COLUMNS = {"Handle": "handle", **ATTENDANCE_WEEKS}
+HIGH_PRIORITY_FILE: Final[Path] = Path("high_prio.csv")
+MEMBERS_FILE: Final[Path] = Path("Members.xlsx")
+OLD_ATTENDANCE_FILE: Final[Path] = Path("attendance_prev.xlsx")
+RESPONSE_FILE: Final[Path] = Path("responses.xlsx")
+
+GROUPS_FILE: Final[Path] = Path("groups.xlsx")
+NEW_ATTENDANCE_FILE: Final[Path] = Path("attendance.xlsx")
+RAW_GROUPS_FILE: Final[Path] = Path("groups.csv")
 
 
 def get_members_email() -> pl.Series:
     """Return a list of ASS members."""
-    if "Members.xlsx" not in os.listdir():
+    if not MEMBERS_FILE.exists():
         logging.warning("No members list found")
         return pl.Series(dtype=pl.Utf8)
 
     return (
-        pl.read_excel("Members.xlsx")
+        pl.read_excel(MEMBERS_FILE)
         .filter("Approved")
         .with_columns(pl.col("Email address").str.to_lowercase())
         .get_column("Email address")
@@ -79,12 +87,12 @@ def get_members_email() -> pl.Series:
 
 def get_paid_members_email() -> pl.Series:
     """Return a list of ASS members that paid."""
-    if "Members.xlsx" not in os.listdir():
+    if not MEMBERS_FILE.exists():
         logging.warning("No members list found")
         return pl.Series(dtype=pl.Utf8)
 
     return (
-        pl.read_excel("Members.xlsx")
+        pl.read_excel(MEMBERS_FILE)
         .filter("Paid")
         .with_columns(pl.col("Email address").str.to_lowercase())
         .get_column("Email address")
@@ -93,12 +101,12 @@ def get_paid_members_email() -> pl.Series:
 
 def get_high_priority() -> pl.Series:
     """Return a list of people who were left out last cycle (manually created)."""
-    if "high_prio.csv" not in os.listdir():
+    if not HIGH_PRIORITY_FILE.exists():
         logging.warning("No high priority list found")
         return pl.Series(dtype=pl.Utf8)
 
     return (
-        pl.scan_csv("high_prio.csv")
+        pl.scan_csv(HIGH_PRIORITY_FILE)
         .with_columns(pl.col("handle").str.to_lowercase())
         .collect()
         .get_column("handle")
@@ -111,11 +119,11 @@ def get_low_priority() -> pl.Series:
 
     Members with a "No show" or 2 "Gave notice" are considered a disruption.
     """
-    if "attendance_prev.xlsx" not in os.listdir():
+    if not OLD_ATTENDANCE_FILE.exists():
         logging.warning("No attendance file found")
         return pl.Series(dtype=pl.Utf8)
 
-    all_sheets = pl.read_excel("attendance_prev.xlsx", sheet_id=0)
+    all_sheets = pl.read_excel(OLD_ATTENDANCE_FILE, sheet_id=0)
     no_show = pl.col(ATTENDANCE_WEEKS.values()).eq_missing("No show")
     gave_notice = pl.col(ATTENDANCE_WEEKS.values()).eq_missing("Gave notice")
     return (
@@ -173,7 +181,7 @@ def get_class_registrations() -> pl.LazyFrame:
     (see GROUPS_MAP for the full list of groups)
     """
     return (
-        pl.read_excel("responses.xlsx")
+        pl.read_excel(RESPONSE_FILE)
         .select(REGISTRATION_COLUMNS)
         .rename(REGISTRATION_COLUMNS)
         .unique(subset="handle", keep="last", maintain_order=True)
@@ -237,7 +245,7 @@ def print_gmail_emails(lf: pl.LazyFrame) -> None:
 
 def create_group_excel_file(df: pl.DataFrame) -> None:
     """Create an excel file with all the final group divisions."""
-    with Workbook("groups.xlsx") as workbook:
+    with Workbook(GROUPS_FILE) as workbook:
         for group in GROUP_TO_LABEL.values():
             leaders = (
                 df.filter(pl.col(group + "L").is_not_null())
@@ -319,10 +327,10 @@ def main() -> None:
 
     df = lf.drop("email").collect()
     print(str(df))
-    df.write_csv("groups.csv")
+    df.write_csv(RAW_GROUPS_FILE)
     create_group_excel_file(df)
 
-    with Workbook("attendance.xlsx") as workbook:
+    with Workbook(NEW_ATTENDANCE_FILE) as workbook:
         for group in GROUP_TO_LABEL.values():
             create_attendance_sheet(df, workbook, group, "Leader")
             create_attendance_sheet(df, workbook, group, "Follower")
