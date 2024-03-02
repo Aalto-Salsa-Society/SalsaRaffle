@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Final
 
 import polars as pl
+from polars.type_aliases import IntoExprColumn
 from xlsxwriter import Workbook
 
 # A seed for reproducible but random results
@@ -74,7 +75,7 @@ NEW_ATTENDANCE_FILE: Final[Path] = Path("attendance.xlsx")
 RAW_GROUPS_FILE: Final[Path] = Path("groups.csv")
 
 
-def get_members_email() -> pl.Series:
+def get_members_email(condition: IntoExprColumn = "Approved") -> pl.Series:
     """Return a list of ASS members."""
     if not MEMBERS_FILE.exists():
         logging.warning("No members list found")
@@ -82,21 +83,7 @@ def get_members_email() -> pl.Series:
 
     return (
         pl.read_excel(MEMBERS_FILE)
-        .filter("Approved")
-        .with_columns(pl.col("Email address").str.to_lowercase())
-        .get_column("Email address")
-    )
-
-
-def get_paid_members_email() -> pl.Series:
-    """Return a list of ASS members that paid."""
-    if not MEMBERS_FILE.exists():
-        logging.warning("No members list found")
-        return pl.Series(dtype=pl.Utf8)
-
-    return (
-        pl.read_excel(MEMBERS_FILE)
-        .filter("Paid")
+        .filter(condition)
         .with_columns(pl.col("Email address").str.to_lowercase())
         .get_column("Email address")
     )
@@ -204,7 +191,7 @@ def get_class_registrations() -> pl.LazyFrame:
             pl.col("handle").is_in(get_high_priority()).fill_null(value=False).alias("high_prio"),
             pl.col("handle").is_in(get_low_priority()).fill_null(value=False).alias("low_prio"),
             pl.col("email").is_in(get_members_email()).fill_null(value=False).alias("member"),
-            pl.col("email").is_in(get_paid_members_email()).fill_null(value=False).alias("paid"),
+            pl.col("email").is_in(get_members_email("Paid")).fill_null(value=False).alias("paid"),
             # Only allow 1 preference if the second preference is not the same class as the first
             (
                 pl.col("only_1")
