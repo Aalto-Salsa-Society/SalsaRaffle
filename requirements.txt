@@ -1,2 +1,5 @@
 polars[xlsx2csv]
 xlsxwriter
+
+# For typing
+numpy

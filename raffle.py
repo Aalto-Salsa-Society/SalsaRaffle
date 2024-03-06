@@ -311,7 +311,7 @@ def main() -> None:
     # Required due to Kleene's logic
     rejected = pl.any_horizontal(pl.col(ALL_GROUPS).gt(MAX_PER_GROUP))
 
-    assignments = [
+    assignments: list[Callable[[str], pl.Expr]] = [
         # High priority first preference
         lambda group: pl.col(Col.P1).eq(group) & pl.col(Col.HIGH_PRIO),
         # High priority second preference that are not in first preference
