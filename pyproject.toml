@@ -28,4 +28,4 @@ fixable = ["ALL"]
 unfixable = []
 
 [tool.pyright]
-typeCheckingMode = "standard"
+typeCheckingMode = "strict"
