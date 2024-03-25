@@ -12,6 +12,8 @@ import polars as pl
 from polars.type_aliases import IntoExprColumn
 from xlsxwriter import Workbook
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
 # A seed for reproducible but random results
 RANDOM_SEED: Final = 455
 MAX_PER_GROUP: Final = 15
@@ -31,6 +33,7 @@ class Col(enum.StrEnum):
     EMAIL = "email"
     P1 = "first_preference"
     P1_ROLE = "first_preference_role"
+    HAS_P2 = "has_second_preference"
     P2 = "second_preference"
     P2_ROLE = "second_preference_role"
     ONLY_1 = "only_1_preference"
@@ -42,6 +45,8 @@ class Col(enum.StrEnum):
     MEMBER = "member"
     PAID = "paid"
 
+
+HAS_P2_VALUE: Final = "Yes"
 
 # Required files
 HIGH_PRIORITY_FILE: Final = Path("high_prio.csv")
@@ -61,7 +66,7 @@ MEMBER_COLUMNS: Final = {
 }
 
 
-def get_members_email(condition: IntoExprColumn = "Approved") -> pl.Series:
+def get_members(condition: IntoExprColumn = "Approved") -> pl.Series:
     """Return a list of ASS members."""
     if not MEMBERS_FILE.exists():
         logging.warning("No members list found")
@@ -71,8 +76,8 @@ def get_members_email(condition: IntoExprColumn = "Approved") -> pl.Series:
         pl.read_excel(MEMBERS_FILE)
         .rename(MEMBER_COLUMNS)
         .filter(condition)
-        .with_columns(pl.col(Col.EMAIL).str.to_lowercase())
-        .get_column(Col.EMAIL)
+        .with_columns(pl.col(Col.HANDLE).str.to_lowercase())
+        .get_column(Col.HANDLE)
     )
 
 
@@ -139,9 +144,10 @@ def get_low_priority() -> pl.Series:
 REGISTRATION_COLUMNS: Final = {
     "Telegram handle": Col.HANDLE.value,
     "Full name (first and last name)": Col.NAME.value,
-    "Email address": Col.EMAIL.value,
+    "Email Address": Col.EMAIL.value,
     "First preference": Col.P1.value,
     "First preference dance role": Col.P1_ROLE.value,
+    "I have a second preference": Col.HAS_P2.value,
     "Second preference": Col.P2.value,
     "Second preference dance role": Col.P2_ROLE.value,
     "Both preferences": Col.ONLY_1.value,
@@ -201,28 +207,40 @@ def get_class_registrations() -> pl.LazyFrame:
         .lazy()
         .drop_nulls(Col.P1)
         .with_columns(
-            # Salsa Level 1, Follower -> S1F
-            pl.col(Col.P1).map_dict(GROUP_TO_LABEL) + pl.col(Col.P1_ROLE).str.slice(0, length=1),
-            pl.col(Col.P2).map_dict(GROUP_TO_LABEL) + pl.col(Col.P2_ROLE).str.slice(0, length=1),
             pl.col(Col.HANDLE).str.to_lowercase(),
             pl.col(Col.EMAIL).str.to_lowercase(),
-            pl.col(Col.P1).map_dict(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_1),
-            pl.col(Col.P2).map_dict(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_2),
+            pl.col(Col.HAS_P2).eq(HAS_P2_VALUE),
+            pl.col(Col.ONLY_1).is_null(),
+        )
+        .with_columns(
+            # Exclude second preference if they do not have one
+            # The second preference stays in the Google form even when they
+            # change their mind and select no second preference
+            pl.when(pl.col(Col.HAS_P2)).then(pl.col(Col.P2)).otherwise(pl.lit(value=None)).alias(Col.P2),
+            pl.when(pl.col(Col.HAS_P2)).then(pl.col(Col.ONLY_1)).otherwise(pl.lit(value=None)).alias(Col.ONLY_1),
+            pl.when(pl.col(Col.HAS_P2)).then(pl.col(Col.P2_ROLE)).otherwise(pl.lit(value=None)).alias(Col.P2_ROLE),
+        )
+        .with_columns(
+            # Salsa Level 1, Follower -> S1F
+            pl.col(Col.P1).replace(GROUP_TO_LABEL) + pl.col(Col.P1_ROLE).str.slice(0, length=1),
+            pl.col(Col.P2).replace(GROUP_TO_LABEL) + pl.col(Col.P2_ROLE).str.slice(0, length=1),
+            pl.col(Col.P1).replace(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_1),
+            pl.col(Col.P2).replace(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_2),
         )
         .with_columns(
             pl.col(Col.HANDLE).is_in(get_high_priority()).fill_null(value=False).alias(Col.HIGH_PRIO),
             pl.col(Col.HANDLE).is_in(get_low_priority()).fill_null(value=False).alias(Col.LOW_PRIO),
-            pl.col(Col.EMAIL).is_in(get_members_email()).fill_null(value=False).alias(Col.MEMBER),
-            pl.col(Col.EMAIL).is_in(get_members_email(Col.PAID)).fill_null(value=False).alias(Col.PAID),
+            pl.col(Col.HANDLE).is_in(get_members()).fill_null(value=False).alias(Col.MEMBER),
+            pl.col(Col.HANDLE).is_in(get_members(Col.PAID)).fill_null(value=False).alias(Col.PAID),
             # Only allow 1 preference if the second preference is not the same class as the first
-            (pl.col(Col.ONLY_1).is_null() | pl.col(Col.TIMESLOT_1).eq(pl.col(Col.TIMESLOT_2))).alias(Col.ONLY_1),
+            (pl.col(Col.ONLY_1) | pl.col(Col.TIMESLOT_1).eq(pl.col(Col.TIMESLOT_2))).alias(Col.ONLY_1),
         )
         .with_columns(
             # Remove high priority if they already have low priority
             (pl.col(Col.HIGH_PRIO) & ~pl.col(Col.LOW_PRIO)).alias(Col.HIGH_PRIO),
             (~pl.col(Col.HIGH_PRIO) & ~pl.col(Col.LOW_PRIO)).alias(Col.MED_PRIO),
         )
-        .with_columns(pl.lit(value=None).alias(group) for group in ALL_GROUPS)
+        .with_columns(pl.lit(value=None).cast(pl.Int64).alias(group) for group in ALL_GROUPS)
     )
 
 
@@ -238,7 +256,7 @@ def assign(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFr
         )
         lf = lf.with_columns(
             pl.when(assignees)
-            .then(assignees.cumsum() + starting_point)
+            .then(assignees.cum_sum() + starting_point)
             .otherwise(pl.col(group))
             .alias(group)
         )
@@ -311,7 +329,7 @@ def main() -> None:
     # Required due to Kleene's logic
     rejected = pl.any_horizontal(pl.col(ALL_GROUPS).gt(MAX_PER_GROUP))
 
-    assignments = [
+    assignments: list[Callable[[str], pl.Expr]] = [
         # High priority first preference
         lambda group: pl.col(Col.P1).eq(group) & pl.col(Col.HIGH_PRIO),
         # High priority second preference that are not in first preference
