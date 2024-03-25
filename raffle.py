@@ -31,6 +31,7 @@ class Col(enum.StrEnum):
     EMAIL = "email"
     P1 = "first_preference"
     P1_ROLE = "first_preference_role"
+    HAS_P2 = "has_second_preference"
     P2 = "second_preference"
     P2_ROLE = "second_preference_role"
     ONLY_1 = "only_1_preference"
@@ -42,6 +43,8 @@ class Col(enum.StrEnum):
     MEMBER = "member"
     PAID = "paid"
 
+
+HAS_P2_VALUE: Final = "Yes"
 
 # Required files
 HIGH_PRIORITY_FILE: Final = Path("high_prio.csv")
@@ -142,6 +145,7 @@ REGISTRATION_COLUMNS: Final = {
     "Email address": Col.EMAIL.value,
     "First preference": Col.P1.value,
     "First preference dance role": Col.P1_ROLE.value,
+    "I have a second preference": Col.HAS_P2.value,
     "Second preference": Col.P2.value,
     "Second preference dance role": Col.P2_ROLE.value,
     "Both preferences": Col.ONLY_1.value,
@@ -201,11 +205,23 @@ def get_class_registrations() -> pl.LazyFrame:
         .lazy()
         .drop_nulls(Col.P1)
         .with_columns(
+            pl.col(Col.HANDLE).str.to_lowercase(),
+            pl.col(Col.EMAIL).str.to_lowercase(),
+            pl.col(Col.HAS_P2).eq(HAS_P2_VALUE),
+            pl.col(Col.ONLY_1).is_null(),
+        )
+        .with_columns(
+            # Exclude second preference if they do not have one
+            # The second preference stays in the Google form even when they
+            # change their mind and select no second preference
+            pl.when(pl.col(Col.HAS_P2)).then(pl.col(Col.P2)).otherwise(pl.lit(value=None)).alias(Col.P2),
+            pl.when(pl.col(Col.HAS_P2)).then(pl.col(Col.ONLY_1)).otherwise(pl.lit(value=None)).alias(Col.ONLY_1),
+            pl.when(pl.col(Col.HAS_P2)).then(pl.col(Col.P2_ROLE)).otherwise(pl.lit(value=None)).alias(Col.P2_ROLE),
+        )
+        .with_columns(
             # Salsa Level 1, Follower -> S1F
             pl.col(Col.P1).replace(GROUP_TO_LABEL) + pl.col(Col.P1_ROLE).str.slice(0, length=1),
             pl.col(Col.P2).replace(GROUP_TO_LABEL) + pl.col(Col.P2_ROLE).str.slice(0, length=1),
-            pl.col(Col.HANDLE).str.to_lowercase(),
-            pl.col(Col.EMAIL).str.to_lowercase(),
             pl.col(Col.P1).replace(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_1),
             pl.col(Col.P2).replace(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_2),
         )
@@ -215,7 +231,7 @@ def get_class_registrations() -> pl.LazyFrame:
             pl.col(Col.EMAIL).is_in(get_members_email()).fill_null(value=False).alias(Col.MEMBER),
             pl.col(Col.EMAIL).is_in(get_members_email(Col.PAID)).fill_null(value=False).alias(Col.PAID),
             # Only allow 1 preference if the second preference is not the same class as the first
-            (pl.col(Col.ONLY_1).is_null() | pl.col(Col.TIMESLOT_1).eq(pl.col(Col.TIMESLOT_2))).alias(Col.ONLY_1),
+            (pl.col(Col.ONLY_1) | pl.col(Col.TIMESLOT_1).eq(pl.col(Col.TIMESLOT_2))).alias(Col.ONLY_1),
         )
         .with_columns(
             # Remove high priority if they already have low priority
