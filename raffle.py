@@ -202,12 +202,12 @@ def get_class_registrations() -> pl.LazyFrame:
         .drop_nulls(Col.P1)
         .with_columns(
             # Salsa Level 1, Follower -> S1F
-            pl.col(Col.P1).map_dict(GROUP_TO_LABEL) + pl.col(Col.P1_ROLE).str.slice(0, length=1),
-            pl.col(Col.P2).map_dict(GROUP_TO_LABEL) + pl.col(Col.P2_ROLE).str.slice(0, length=1),
+            pl.col(Col.P1).replace(GROUP_TO_LABEL) + pl.col(Col.P1_ROLE).str.slice(0, length=1),
+            pl.col(Col.P2).replace(GROUP_TO_LABEL) + pl.col(Col.P2_ROLE).str.slice(0, length=1),
             pl.col(Col.HANDLE).str.to_lowercase(),
             pl.col(Col.EMAIL).str.to_lowercase(),
-            pl.col(Col.P1).map_dict(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_1),
-            pl.col(Col.P2).map_dict(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_2),
+            pl.col(Col.P1).replace(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_1),
+            pl.col(Col.P2).replace(GROUP_TO_TIMESLOT).alias(Col.TIMESLOT_2),
         )
         .with_columns(
             pl.col(Col.HANDLE).is_in(get_high_priority()).fill_null(value=False).alias(Col.HIGH_PRIO),
@@ -222,7 +222,7 @@ def get_class_registrations() -> pl.LazyFrame:
             (pl.col(Col.HIGH_PRIO) & ~pl.col(Col.LOW_PRIO)).alias(Col.HIGH_PRIO),
             (~pl.col(Col.HIGH_PRIO) & ~pl.col(Col.LOW_PRIO)).alias(Col.MED_PRIO),
         )
-        .with_columns(pl.lit(value=None).alias(group) for group in ALL_GROUPS)
+        .with_columns(pl.lit(value=None).cast(pl.Int64).alias(group) for group in ALL_GROUPS)
     )
 
 
@@ -238,7 +238,7 @@ def assign(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFr
         )
         lf = lf.with_columns(
             pl.when(assignees)
-            .then(assignees.cumsum() + starting_point)
+            .then(assignees.cum_sum() + starting_point)
             .otherwise(pl.col(group))
             .alias(group)
         )
