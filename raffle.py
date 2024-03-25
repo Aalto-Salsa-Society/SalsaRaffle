@@ -66,7 +66,7 @@ MEMBER_COLUMNS: Final = {
 }
 
 
-def get_members_email(condition: IntoExprColumn = "Approved") -> pl.Series:
+def get_members(condition: IntoExprColumn = "Approved") -> pl.Series:
     """Return a list of ASS members."""
     if not MEMBERS_FILE.exists():
         logging.warning("No members list found")
@@ -76,8 +76,8 @@ def get_members_email(condition: IntoExprColumn = "Approved") -> pl.Series:
         pl.read_excel(MEMBERS_FILE)
         .rename(MEMBER_COLUMNS)
         .filter(condition)
-        .with_columns(pl.col(Col.EMAIL).str.to_lowercase())
-        .get_column(Col.EMAIL)
+        .with_columns(pl.col(Col.HANDLE).str.to_lowercase())
+        .get_column(Col.HANDLE)
     )
 
 
@@ -230,8 +230,8 @@ def get_class_registrations() -> pl.LazyFrame:
         .with_columns(
             pl.col(Col.HANDLE).is_in(get_high_priority()).fill_null(value=False).alias(Col.HIGH_PRIO),
             pl.col(Col.HANDLE).is_in(get_low_priority()).fill_null(value=False).alias(Col.LOW_PRIO),
-            pl.col(Col.EMAIL).is_in(get_members_email()).fill_null(value=False).alias(Col.MEMBER),
-            pl.col(Col.EMAIL).is_in(get_members_email(Col.PAID)).fill_null(value=False).alias(Col.PAID),
+            pl.col(Col.HANDLE).is_in(get_members()).fill_null(value=False).alias(Col.MEMBER),
+            pl.col(Col.HANDLE).is_in(get_members(Col.PAID)).fill_null(value=False).alias(Col.PAID),
             # Only allow 1 preference if the second preference is not the same class as the first
             (pl.col(Col.ONLY_1) | pl.col(Col.TIMESLOT_1).eq(pl.col(Col.TIMESLOT_2))).alias(Col.ONLY_1),
         )
