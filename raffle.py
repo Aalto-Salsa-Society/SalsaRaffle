@@ -144,7 +144,7 @@ def get_low_priority() -> pl.Series:
 REGISTRATION_COLUMNS: Final = {
     "Telegram handle": Col.HANDLE.value,
     "Full name (first and last name)": Col.NAME.value,
-    "Email address": Col.EMAIL.value,
+    "Email Address": Col.EMAIL.value,
     "First preference": Col.P1.value,
     "First preference dance role": Col.P1_ROLE.value,
     "I have a second preference": Col.HAS_P2.value,
