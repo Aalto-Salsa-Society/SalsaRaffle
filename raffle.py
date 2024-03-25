@@ -12,6 +12,8 @@ import polars as pl
 from polars.type_aliases import IntoExprColumn
 from xlsxwriter import Workbook
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
 # A seed for reproducible but random results
 RANDOM_SEED: Final = 455
 MAX_PER_GROUP: Final = 15
