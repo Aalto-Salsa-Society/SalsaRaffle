@@ -49,15 +49,17 @@ class Col(enum.StrEnum):
 HAS_P2_VALUE: Final = "Yes"
 
 # Required files
-HIGH_PRIORITY_FILE: Final = Path("high_prio.csv")
-MEMBERS_FILE: Final = Path("Members.xlsx")
-OLD_ATTENDANCE_FILE: Final = Path("attendance_prev.xlsx")
-RESPONSE_FILE: Final = Path("responses.xlsx")
+INPUT_DIR: Final = Path("data") / "input"
+HIGH_PRIORITY_FILE: Final = INPUT_DIR / "high_prio.csv"
+MEMBERS_FILE: Final = INPUT_DIR / "Members.xlsx"
+OLD_ATTENDANCE_FILE: Final = INPUT_DIR / "attendance.xlsx"
+RESPONSE_FILE: Final = INPUT_DIR / "responses.xlsx"
 
 # Created files
-GROUPS_FILE: Final = Path("groups.xlsx")
-NEW_ATTENDANCE_FILE: Final = Path("attendance.xlsx")
-RAW_GROUPS_FILE: Final = Path("groups.csv")
+OUTPUT_DIR: Final = Path("data") / "output"
+GROUPS_FILE: Final = OUTPUT_DIR / "groups.xlsx"
+NEW_ATTENDANCE_FILE: Final = OUTPUT_DIR / "attendance.xlsx"
+RAW_GROUPS_FILE: Final = OUTPUT_DIR / "groups.csv"
 
 
 MEMBER_COLUMNS: Final = {
@@ -322,6 +324,11 @@ def create_attendance_sheet(
 
 def main() -> None:
     """Run the main program."""
+    if not INPUT_DIR.exists():
+        INPUT_DIR.mkdir(parents=True)
+    if not OUTPUT_DIR.exists():
+        OUTPUT_DIR.mkdir(parents=True)
+
     lf = get_class_registrations()
 
     # A person is accepted if they got a number less than 15
