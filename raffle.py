@@ -42,8 +42,11 @@ class Col(enum.StrEnum):
     HIGH_PRIO = "high_priority"
     MED_PRIO = "medium_priority"
     LOW_PRIO = "low_priority"
+
+    # Membership columns
     MEMBER = "member"
     PAID = "paid"
+    APPROVED = "approved"
 
 
 HAS_P2_VALUE: Final = "Yes"
@@ -62,13 +65,7 @@ NEW_ATTENDANCE_FILE: Final = OUTPUT_DIR / "attendance.xlsx"
 RAW_GROUPS_FILE: Final = OUTPUT_DIR / "groups.csv"
 
 
-MEMBER_COLUMNS: Final = {
-    "Email address": Col.EMAIL.value,
-    "Paid": Col.PAID.value,
-}
-
-
-def get_members(condition: IntoExprColumn = "Approved") -> pl.Series:
+def get_members(condition: IntoExprColumn = Col.APPROVED) -> pl.Series:
     """Return a list of ASS members."""
     if not MEMBERS_FILE.exists():
         logging.warning("No members list found")
@@ -76,7 +73,6 @@ def get_members(condition: IntoExprColumn = "Approved") -> pl.Series:
 
     return (
         pl.read_excel(MEMBERS_FILE)
-        .rename(MEMBER_COLUMNS)
         .filter(condition)
         .with_columns(pl.col(Col.HANDLE).str.to_lowercase())
         .get_column(Col.HANDLE)
