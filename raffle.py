@@ -12,7 +12,10 @@ import polars as pl
 from polars.type_aliases import IntoExprColumn
 from xlsxwriter import Workbook
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
 
 # A seed for reproducible but random results
 RANDOM_SEED: Final = 455
@@ -180,6 +183,11 @@ ALL_GROUPS: Final = [
     )
 ]
 
+# Useful expressions
+ACCEPTED: Final = pl.any_horizontal(pl.col(ALL_GROUPS).lt(MAX_PER_GROUP)).fill_null(value=False)
+REJECTED: Final = pl.all_horizontal(pl.col(ALL_GROUPS).ge(MAX_PER_GROUP)).fill_null(value=True)
+LOW_PRIO: Final = pl.col(Col.LOW_PRIO)
+
 
 def get_class_registrations() -> pl.LazyFrame:
     """
@@ -263,13 +271,6 @@ def assign(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFr
     return lf
 
 
-def print_gmail_emails(lf: pl.LazyFrame) -> None:
-    """Print the emails of the people that have been accepted."""
-    emails = lf.unique().collect().get_column(Col.EMAIL).to_list()
-    print(f"Accepted emails {len(emails)}:")
-    print(*emails, sep=", ")
-
-
 def create_group_excel_file(df: pl.DataFrame) -> None:
     """Create an excel file with all the final group divisions."""
     with Workbook(GROUPS_FILE) as workbook:
@@ -318,6 +319,24 @@ def create_attendance_sheet(
     )
 
 
+def print_results(groups_lazy: pl.LazyFrame) -> None:
+    """Print the results of the program."""
+    groups = groups_lazy.collect()
+
+    emails = groups.get_column(Col.EMAIL).unique().to_list()
+    print(f"Accepted emails {len(emails)}:")
+    print(*emails, sep=", ")
+
+    print(str(groups))
+    groups.write_csv(RAW_GROUPS_FILE)
+    create_group_excel_file(groups)
+
+    with Workbook(NEW_ATTENDANCE_FILE) as workbook:
+        for group in GROUP_TO_LABEL.values():
+            create_attendance_sheet(groups, workbook, group, LEADER)
+            create_attendance_sheet(groups, workbook, group, FOLLOWER)
+
+
 def main() -> None:
     """Run the main program."""
     if not INPUT_DIR.exists():
@@ -325,46 +344,30 @@ def main() -> None:
     if not OUTPUT_DIR.exists():
         OUTPUT_DIR.mkdir(parents=True)
 
-    lf = get_class_registrations()
-
-    # A person is accepted if they got a number less than 15
-    accepted = pl.any_horizontal(pl.col(ALL_GROUPS).le(MAX_PER_GROUP))
-    # Required due to Kleene's logic
-    rejected = pl.any_horizontal(pl.col(ALL_GROUPS).gt(MAX_PER_GROUP))
+    groups = get_class_registrations()
 
     assignments: list[Callable[[str], pl.Expr]] = [
         # High priority first preference
         lambda group: pl.col(Col.P1).eq(group) & pl.col(Col.HIGH_PRIO),
         # High priority second preference that are not in first preference
-        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.HIGH_PRIO) & rejected,
+        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.HIGH_PRIO) & REJECTED,
         # Medium priority first preference
         lambda group: pl.col(Col.P1).eq(group) & pl.col(Col.MED_PRIO),
         # Medium priority second preference that are not in first preference
-        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.MED_PRIO) & rejected,
+        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.MED_PRIO) & REJECTED,
         # Med and high priority (not low) second preference that want to join more than 1 class
         lambda group: pl.col(Col.P2).eq(group) & ~pl.col(Col.LOW_PRIO) & ~pl.col(Col.ONLY_1),
         # All low priority first preference
         lambda group: pl.col(Col.P1).eq(group) & pl.col(Col.LOW_PRIO),
         # All low priority second preference that are not in first preference
-        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.LOW_PRIO) & rejected,
+        lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.LOW_PRIO) & REJECTED,
         # All low priority second preference that want to join more than 1 class
         lambda group: pl.col(Col.P2).eq(group) & pl.col(Col.LOW_PRIO) & ~pl.col(Col.ONLY_1),
     ]
     for assign_rule in assignments:
-        lf = assign(lf, assign_rule)
+        groups = assign(groups, assign_rule)
 
-    # Create desired outputs
-    print_gmail_emails(lf.filter(accepted))
-
-    df = lf.drop(Col.EMAIL).collect()
-    print(str(df))
-    df.write_csv(RAW_GROUPS_FILE)
-    create_group_excel_file(df)
-
-    with Workbook(NEW_ATTENDANCE_FILE) as workbook:
-        for group in GROUP_TO_LABEL.values():
-            create_attendance_sheet(df, workbook, group, LEADER)
-            create_attendance_sheet(df, workbook, group, FOLLOWER)
+    print_results(groups)
 
 
 if __name__ == "__main__":
