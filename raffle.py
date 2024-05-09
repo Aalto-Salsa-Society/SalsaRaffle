@@ -56,8 +56,8 @@ HAS_P2_VALUE: Final = "Yes"
 
 # Required files
 INPUT_DIR: Final = Path("data") / "input"
-HIGH_PRIORITY_FILE: Final = INPUT_DIR / "high_prio.csv"
 MEMBERS_FILE: Final = INPUT_DIR / "Members.xlsx"
+OLD_GROUPS_FILE: Final = INPUT_DIR / "groups.csv"
 OLD_ATTENDANCE_FILE: Final = INPUT_DIR / "attendance.xlsx"
 RESPONSE_FILE: Final = INPUT_DIR / "responses.xlsx"
 
@@ -83,18 +83,15 @@ def get_members(condition: IntoExprColumn = Col.APPROVED) -> pl.Series:
 
 
 def get_high_priority() -> pl.Series:
-    """
-    Return a list of people who were left out last cycle.
-
-    This list is manually created.
-    """
-    if not HIGH_PRIORITY_FILE.exists():
-        logging.warning("No high priority list found")
+    """Return a list of people who were left out last cycle."""
+    if not OLD_GROUPS_FILE.exists():
+        logging.warning("No groups file found in input")
         return pl.Series(dtype=pl.Utf8)
 
     return (
-        pl.scan_csv(HIGH_PRIORITY_FILE)
+        pl.scan_csv(OLD_GROUPS_FILE)
         .with_columns(pl.col(Col.HANDLE).str.to_lowercase())
+        .filter(REJECTED & ~LOW_PRIO)
         .collect()
         .get_column(Col.HANDLE)
     )
