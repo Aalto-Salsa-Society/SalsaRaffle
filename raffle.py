@@ -323,11 +323,23 @@ def print_results(groups_lazy: pl.LazyFrame) -> None:
     """Print the results of the program."""
     groups = groups_lazy.collect()
 
-    emails = groups.get_column(Col.EMAIL).unique().to_list()
-    print(f"Accepted emails {len(emails)}:")
-    print(*emails, sep=", ")
+    print("---")
+    print("Number of applicants:")
+    print("Total:   ", len(groups))
+    print("Accepted:", len(groups.filter(ACCEPTED)))
+    print("Rejected:", len(groups.filter(REJECTED)))
+    print("Rejected and not low priority:")
+    print(groups.filter(REJECTED & ~LOW_PRIO).select([Col.NAME, Col.HANDLE]))
+    print("---")
+    accepted_emails = groups.filter(ACCEPTED).get_column(Col.EMAIL).unique().to_list()
+    print(f"Accepted emails {len(accepted_emails)}:")
+    print(*accepted_emails, sep=", ")
+    print("---")
+    rejected_emails = groups.filter(REJECTED).get_column(Col.EMAIL).unique().to_list()
+    print(f"Rejected emails {len(rejected_emails)}:")
+    print(*rejected_emails, sep=", ")
+    print("---")
 
-    print(str(groups))
     groups.write_csv(RAW_GROUPS_FILE)
     create_group_excel_file(groups)
 
