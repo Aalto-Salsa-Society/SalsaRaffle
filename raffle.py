@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Final
 
 import polars as pl
-from polars.type_aliases import IntoExprColumn
 from xlsxwriter import Workbook
 
 logging.basicConfig(
@@ -68,7 +67,7 @@ NEW_ATTENDANCE_FILE: Final = OUTPUT_DIR / "attendance.xlsx"
 RAW_GROUPS_FILE: Final = OUTPUT_DIR / "groups.csv"
 
 
-def get_members(condition: IntoExprColumn = Col.APPROVED) -> pl.Series:
+def get_members(condition: pl.Expr | str = Col.APPROVED) -> pl.Series:
     """Return a list of ASS members."""
     if not MEMBERS_FILE.exists():
         logging.warning("No members list found")
