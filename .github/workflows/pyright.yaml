@@ -1,23 +1,14 @@
 name: pyright
 on: push
-
 jobs:
   pyright:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v2
         with:
-          python-version: "3.12"
-      - uses: actions/cache@v3
-        id: cache
-        with:
-          path: .venv
-          key: ${{ hashFiles('requirements.txt') }}
-      - if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-      - run: echo "$PWD/.venv/bin" >> $GITHUB_PATH
-      - uses: jakebailey/pyright-action@v2
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv python install
+      - run: uv sync --dev
+      - run: uv run pyright
