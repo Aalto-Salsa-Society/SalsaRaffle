@@ -141,7 +141,7 @@ def get_low_priority() -> pl.Series:
 REGISTRATION_COLUMNS: Final = {
     "Telegram handle": Col.HANDLE.value,
     "Full name (first and last name)": Col.NAME.value,
-    "Email Address": Col.EMAIL.value,
+    "Email address": Col.EMAIL.value,
     "First preference": Col.P1.value,
     "First preference dance role": Col.P1_ROLE.value,
     "I have a second preference": Col.HAS_P2.value,
@@ -324,8 +324,9 @@ def print_results(groups_lazy: pl.LazyFrame) -> None:
     print("Total:   ", len(groups))
     print("Accepted:", len(groups.filter(ACCEPTED)))
     print("Rejected:", len(groups.filter(REJECTED)))
-    print("Rejected and not low priority:")
-    print(groups.filter(REJECTED & ~LOW_PRIO).select([Col.NAME, Col.HANDLE]))
+    next_high_prio = groups.filter(REJECTED & ~LOW_PRIO).select([Col.NAME, Col.HANDLE])
+    print("Rejected and not low priority:", len(next_high_prio))
+    print(next_high_prio)
     print("---")
     accepted_emails = groups.filter(ACCEPTED).get_column(Col.EMAIL).unique().to_list()
     print(f"Accepted emails {len(accepted_emails)}:")
