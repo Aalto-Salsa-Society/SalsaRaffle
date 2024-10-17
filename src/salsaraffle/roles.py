@@ -27,7 +27,7 @@ def get_group_to_label() -> dict[str, str]:
 
 def get_label_to_group() -> dict[str, str]:
     """Return a map from a label to a group."""
-    return {v: k for k, v in get_group_to_label().items()}
+    return {label: group for group, label, _ in GROUP_INFO}
 
 
 def get_all_groups() -> list[str]:
