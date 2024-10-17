@@ -1,7 +1,7 @@
 version = 1
 requires-python = ">=3.12"
 
-[[distribution]]
+[[package]]
 name = "fastexcel"
 version = "0.11.6"
 source = { registry = "https://pypi.org/simple" }
@@ -16,7 +16,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/01/09/882cb7b8557a958e09c8ace62f0513ea83dbb8222b50ec1620270b2bd552/fastexcel-0.11.6-cp38-abi3-win_amd64.whl", hash = "sha256:cc60bc6dd86c95b1b0ab4cbde9e3e4ee47fe53a0341332b75cc981aef1062078", size = 918505 },
 ]
 
-[[distribution]]
+[[package]]
 name = "nodeenv"
 version = "1.9.1"
 source = { registry = "https://pypi.org/simple" }
@@ -25,7 +25,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d2/1d/1b658dbd2b9fa9c4c9f32accbfc0205d532c8c6194dc0f2a4c0428e7128a/nodeenv-1.9.1-py2.py3-none-any.whl", hash = "sha256:ba11c9782d29c27c70ffbdda2d7415098754709be8a7056d79a737cd901155c9", size = 22314 },
 ]
 
-[[distribution]]
+[[package]]
 name = "numpy"
 version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -61,7 +61,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/bb/4c/14a41eb5c9548c6cee6af0936eabfd985c69230ffa2f2598321431a9aa0a/numpy-2.1.1-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:53e27293b3a2b661c03f79aa51c3987492bd4641ef933e366e0f9f6c9bf257ec", size = 14155072 },
 ]
 
-[[distribution]]
+[[package]]
 name = "polars"
 version = "1.8.2"
 source = { registry = "https://pypi.org/simple" }
@@ -74,12 +74,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9c/45/77e4fda23368907c06bf70fc722de28d442c5087bbc8a60c29b8396750ea/polars-1.8.2-cp38-abi3-win_amd64.whl", hash = "sha256:ce1a1c1e2150ffcc44a5f1c461d738e1dcd95abbd0f210af0271c7ac0c9f7ef9", size = 32394690 },
 ]
 
-[distribution.optional-dependencies]
+[package.optional-dependencies]
 calamine = [
     { name = "fastexcel" },
 ]
 
-[[distribution]]
+[[package]]
 name = "pyarrow"
 version = "17.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -97,7 +97,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ae/49/baafe2a964f663413be3bd1cf5c45ed98c5e42e804e2328e18f4570027c1/pyarrow-17.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:392bc9feabc647338e6c89267635e111d71edad5fcffba204425a7c8d13610d7", size = 25099235 },
 ]
 
-[[distribution]]
+[[package]]
 name = "pyright"
 version = "1.1.382.post1"
 source = { registry = "https://pypi.org/simple" }
@@ -110,7 +110,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ed/e2/7661f69927bf052e36d9c162c5087a02c346d0269be238cea2f5ae1e80f2/pyright-1.1.382.post1-py3-none-any.whl", hash = "sha256:21a4749dd1740e209f88d3a601e9f40748670d39481ea32b9d77edf7f3f1fb2e", size = 18669 },
 ]
 
-[[distribution]]
+[[package]]
 name = "ruff"
 version = "0.6.8"
 source = { registry = "https://pypi.org/simple" }
@@ -135,23 +135,36 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d9/bd/a8b0c64945a92eaeeb8d0283f27a726a776a1c9d12734d990c5fc7a1278c/ruff-0.6.8-py3-none-win_arm64.whl", hash = "sha256:8d3bb2e3fbb9875172119021a13eed38849e762499e3cfde9588e4b4d70968dc", size = 8669595 },
 ]
 
-[[distribution]]
+[[package]]
 name = "salsaraffle"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "polars", extra = ["calamine"] },
     { name = "xlsxwriter" },
 ]
 
-[distribution.dev-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "numpy" },
     { name = "pyright" },
     { name = "ruff" },
 ]
 
-[[distribution]]
+[package.metadata]
+requires-dist = [
+    { name = "polars", extras = ["calamine"], specifier = ">=1.7.0" },
+    { name = "xlsxwriter", specifier = ">=3.2.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "numpy", specifier = ">=2.1.1" },
+    { name = "pyright", specifier = ">=1.1.380" },
+    { name = "ruff", specifier = ">=0.6.4" },
+]
+
+[[package]]
 name = "typing-extensions"
 version = "4.12.2"
 source = { registry = "https://pypi.org/simple" }
@@ -160,7 +173,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
 ]
 
-[[distribution]]
+[[package]]
 name = "xlsxwriter"
 version = "3.2.0"
 source = { registry = "https://pypi.org/simple" }
