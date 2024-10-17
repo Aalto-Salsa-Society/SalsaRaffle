@@ -1,24 +1,36 @@
 """All code for creating the groups for the ASS dance classes."""
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 import polars as pl
 
-from salsaraffle.assign import assign
-from salsaraffle.column import Col
-from salsaraffle.expressions import REJECTED
+from salsaraffle.column import Col, get_all_groups
 from salsaraffle.registration import get_class_registrations
-from salsaraffle.results import compile_results
+from salsaraffle.results import REJECTED, compile_results
 from salsaraffle.settings import INPUT_DIR, OUTPUT_DIR
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
+
+
+def assign(lf: pl.LazyFrame, assign_rule: Callable[[str], pl.Expr]) -> pl.LazyFrame:
+    """Assign a spot in all groups according to the assign_rule."""
+    for group in get_all_groups():
+        assignees = assign_rule(group) & pl.col(group).is_null()
+        starting_point = (
+            pl.when(pl.col(group).max().is_null()).then(0).otherwise(pl.col(group).max())
+        )
+        lf = lf.with_columns(
+            pl.when(assignees)
+            .then(assignees.cum_sum() + starting_point)
+            .otherwise(pl.col(group))
+            .alias(group)
+        )
+
+    return lf
 
 
 def main() -> None:

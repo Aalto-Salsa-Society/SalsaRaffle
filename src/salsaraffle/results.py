@@ -5,15 +5,27 @@ from typing import Final
 import polars as pl
 from xlsxwriter import Workbook
 
-from salsaraffle.column import Col
-from salsaraffle.expressions import ACCEPTED, LOW_PRIO, REJECTED
-from salsaraffle.priority import ATTENDANCE_WEEKS
-from salsaraffle.settings import GROUP_INFO, GROUPS_FILE, NEW_ATTENDANCE_FILE, RAW_GROUPS_FILE
+from salsaraffle.column import Col, get_all_groups
+from salsaraffle.settings import (
+    GROUP_INFO,
+    GROUPS_FILE,
+    MAX_PER_GROUP,
+    NEW_ATTENDANCE_FILE,
+    RAW_GROUPS_FILE,
+)
 
 LEADER_LABEL: Final = "L"
 FOLLOWER_LABEL: Final = "F"
 LEADER: Final = "Leader"
 FOLLOWER: Final = "Follower"
+
+
+ACCEPTED: Final = pl.any_horizontal(pl.col(get_all_groups()).lt(MAX_PER_GROUP)).fill_null(
+    value=False
+)
+REJECTED: Final = pl.all_horizontal(pl.col(get_all_groups()).ge(MAX_PER_GROUP)).fill_null(
+    value=True
+)
 
 
 def create_group_excel_file(df: pl.DataFrame) -> None:
@@ -38,6 +50,14 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
                 autofit=True,
                 header_format={"bold": True},
             )
+
+
+ATTENDANCE_WEEKS: Final = {
+    "Week 1": "week1",
+    "Week 2": "week2",
+    "Week 3": "week3",
+    "Week 4": "week4",
+}
 
 
 def create_attendance_sheet(
@@ -78,7 +98,7 @@ def compile_results(groups_lazy: pl.LazyFrame) -> None:
     print("Total:   ", len(groups))
     print("Accepted:", len(groups.filter(ACCEPTED)))
     print("Rejected:", len(groups.filter(REJECTED)))
-    next_high_prio = groups.filter(REJECTED & ~LOW_PRIO).select([Col.NAME, Col.HANDLE])
+    next_high_prio = groups.filter(REJECTED & ~pl.col(Col.LOW_PRIO)).select([Col.NAME, Col.HANDLE])
     print("Rejected and not low priority:", len(next_high_prio))
     print(next_high_prio)
     print("---")

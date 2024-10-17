@@ -6,7 +6,7 @@ from typing import Final
 import polars as pl
 
 from salsaraffle.column import Col
-from salsaraffle.expressions import LOW_PRIO, REJECTED
+from salsaraffle.results import ATTENDANCE_WEEKS, REJECTED
 from salsaraffle.settings import OLD_ATTENDANCE_FILE, OLD_GROUPS_FILE
 
 
@@ -19,7 +19,7 @@ def get_high_priority() -> pl.Series:
     return (
         pl.scan_csv(OLD_GROUPS_FILE)
         .with_columns(pl.col(Col.HANDLE).str.to_lowercase())
-        .filter(REJECTED & ~LOW_PRIO)
+        .filter(REJECTED & ~pl.col(Col.LOW_PRIO))
         .collect()
         .get_column(Col.HANDLE)
     )
@@ -27,12 +27,6 @@ def get_high_priority() -> pl.Series:
 
 NO_SHOW: Final = "no_show"
 GAVE_NOTICE: Final = "gave_notice"
-ATTENDANCE_WEEKS: Final = {
-    "Week 1": "week1",
-    "Week 2": "week2",
-    "Week 3": "week3",
-    "Week 4": "week4",
-}
 ATTENDANCE_COLUMNS: Final = {"Handle": Col.HANDLE.value, **ATTENDANCE_WEEKS}
 
 
