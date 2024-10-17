@@ -4,11 +4,10 @@ from typing import Final
 
 import polars as pl
 
-from salsaraffle.column import Col
+from salsaraffle.column import Col, get_all_groups
 from salsaraffle.members import get_members
 from salsaraffle.priority import get_high_priority, get_low_priority
-from salsaraffle.roles import get_all_groups, get_group_to_label, get_group_to_timeslot
-from salsaraffle.settings import RANDOM_SEED, RESPONSE_FILE
+from salsaraffle.settings import GROUP_INFO, RANDOM_SEED, RESPONSE_FILE
 
 REGISTRATION_COLUMNS: Final = {
     "Telegram handle": Col.HANDLE.value,
@@ -93,10 +92,12 @@ def add_member_info(registrations: pl.LazyFrame) -> pl.LazyFrame:
 
 def remove_simultaneous_classes(registrations: pl.LazyFrame) -> pl.LazyFrame:
     """Remove second choice if it happens at the same time as the first choice."""
+    group_to_timeslot = {group: timeslot for group, _, timeslot in GROUP_INFO}
+
     # Add timeslot information
     registrations = registrations.with_columns(
-        pl.col(Col.P1_CLASS).replace(get_group_to_timeslot()).alias(Col.TIMESLOT_1),
-        pl.col(Col.P2_CLASS).replace(get_group_to_timeslot()).alias(Col.TIMESLOT_2),
+        pl.col(Col.P1_CLASS).replace(group_to_timeslot).alias(Col.TIMESLOT_1),
+        pl.col(Col.P2_CLASS).replace(group_to_timeslot).alias(Col.TIMESLOT_2),
     )
 
     # Remove overlapping timeslots
@@ -108,18 +109,20 @@ def remove_simultaneous_classes(registrations: pl.LazyFrame) -> pl.LazyFrame:
 
 def add_extra_columns(registrations: pl.LazyFrame) -> pl.LazyFrame:
     """Add extra columns such as the empty groups division and choices."""
+    group_to_label = {group: label for group, label, _ in GROUP_INFO}
+
     # P1_CLASS + P1_ROLE -> P1
     # Salsa Level 1, Follower -> S1F
     registrations = registrations.with_columns(
         (
             pl.col(Col.P1_CLASS)
-            .replace(get_group_to_label())
+            .replace(group_to_label)
             .add(pl.col(Col.P1_ROLE).str.slice(0, length=1))
             .alias(Col.P1)
         ),
         (
             pl.col(Col.P2_CLASS)
-            .replace(get_group_to_label())
+            .replace(group_to_label)
             .add(pl.col(Col.P2_ROLE).str.slice(0, length=1))
             .alias(Col.P2)
         ),

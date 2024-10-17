@@ -2,6 +2,8 @@
 
 import enum
 
+from salsaraffle.settings import GROUP_INFO
+
 
 class Col(enum.StrEnum):
     """All columns used or created."""
@@ -27,3 +29,10 @@ class Col(enum.StrEnum):
     MEMBER = "member"
     PAID = "paid"
     APPROVED = "approved"
+
+
+def get_all_groups() -> list[str]:
+    """Return a list of all the groups."""
+    leader_groups = [group + "L" for _, group, _ in GROUP_INFO]
+    follower_groups = [group + "F" for _, group, _ in GROUP_INFO]
+    return leader_groups + follower_groups

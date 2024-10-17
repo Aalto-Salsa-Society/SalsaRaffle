@@ -1,3 +1,5 @@
+"""All code related to retrieving members information."""
+
 import logging
 
 import polars as pl

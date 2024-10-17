@@ -4,8 +4,7 @@ from typing import Final
 
 import polars as pl
 
-from salsaraffle.column import Col
-from salsaraffle.roles import get_all_groups
+from salsaraffle.column import Col, get_all_groups
 from salsaraffle.settings import MAX_PER_GROUP
 
 ACCEPTED: Final = pl.any_horizontal(pl.col(get_all_groups()).lt(MAX_PER_GROUP)).fill_null(

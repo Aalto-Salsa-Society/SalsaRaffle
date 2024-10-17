@@ -1,24 +1,25 @@
 """Creates output sheets that are uploaded to the members."""
 
+from typing import Final
+
 import polars as pl
 from xlsxwriter import Workbook
 
 from salsaraffle.column import Col
 from salsaraffle.expressions import ACCEPTED, LOW_PRIO, REJECTED
 from salsaraffle.priority import ATTENDANCE_WEEKS
-from salsaraffle.roles import (
-    FOLLOWER,
-    FOLLOWER_LABEL,
-    LEADER,
-    LEADER_LABEL,
-    get_label_to_group,
-    get_role_to_label,
-)
 from salsaraffle.settings import GROUP_INFO, GROUPS_FILE, NEW_ATTENDANCE_FILE, RAW_GROUPS_FILE
+
+LEADER_LABEL: Final = "L"
+FOLLOWER_LABEL: Final = "F"
+LEADER: Final = "Leader"
+FOLLOWER: Final = "Follower"
 
 
 def create_group_excel_file(df: pl.DataFrame) -> None:
     """Create an excel file with all the final group divisions."""
+    label_to_group = {label: group for group, label, _ in GROUP_INFO}
+
     with Workbook(GROUPS_FILE) as workbook:
         for _, group_label, _ in GROUP_INFO:
             leaders = (
@@ -33,7 +34,7 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
             )
             pl.concat((leaders, followers), how="horizontal").write_excel(
                 workbook=workbook,
-                worksheet=get_label_to_group()[group_label],
+                worksheet=label_to_group[group_label],
                 autofit=True,
                 header_format={"bold": True},
             )
@@ -46,9 +47,12 @@ def create_attendance_sheet(
     role: str,
 ) -> None:
     """Create one sheet in the attendance workbook."""
+    role_to_label = {LEADER: LEADER_LABEL, FOLLOWER: FOLLOWER_LABEL}
+    label_to_group = {label: group for group, label, _ in GROUP_INFO}
+
     (
-        df.filter(pl.col(group_label + get_role_to_label()[role]).is_not_null())
-        .sort(group_label + get_role_to_label()[role])
+        df.filter(pl.col(group_label + role_to_label[role]).is_not_null())
+        .sort(group_label + role_to_label[role])
         .select(
             pl.col(Col.NAME).alias("Name"),
             pl.col(Col.HANDLE).alias("Handle"),
@@ -58,7 +62,7 @@ def create_attendance_sheet(
         .with_columns(pl.lit(value=None).alias(keys) for keys in ATTENDANCE_WEEKS)
         .write_excel(
             workbook=workbook,
-            worksheet=get_label_to_group()[group_label] + " " + role,
+            worksheet=label_to_group[group_label] + " " + role,
             autofit=True,
             header_format={"bold": True},
         )
