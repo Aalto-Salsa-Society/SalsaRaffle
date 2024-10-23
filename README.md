@@ -12,10 +12,17 @@ install `uv` run:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-To run this project:
+Run this project with:
 
 ```bash
 uv run raffle
+```
+
+Check for typing and linting errors respectively:
+
+```bash
+uv run pyright
+uv run ruff check
 ```
 
 ## Design Decisions
