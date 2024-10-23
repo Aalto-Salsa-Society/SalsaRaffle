@@ -6,6 +6,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["polars[calamine]>=1.7.0", "xlsxwriter>=3.2.0"]
 
+[project.scripts]
+raffle = "salsaraffle.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

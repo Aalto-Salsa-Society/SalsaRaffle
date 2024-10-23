@@ -15,7 +15,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 To run this project:
 
 ```bash
-uv run src/salsaraffle/main.py
+uv run raffle
 ```
 
 ## Design Decisions
