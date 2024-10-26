@@ -71,8 +71,18 @@ def clean(registrations: pl.LazyFrame) -> pl.LazyFrame:
 def add_priority_info(registrations: pl.LazyFrame) -> pl.LazyFrame:
     """Add priority information to registration data."""
     registrations = registrations.with_columns(
-        pl.col(Col.HANDLE).is_in(get_high_priority()).fill_null(value=False).alias(Col.HIGH_PRIO),
-        pl.col(Col.HANDLE).is_in(get_low_priority()).fill_null(value=False).alias(Col.LOW_PRIO),
+        (
+            pl.col(Col.HANDLE)
+            .is_in(get_high_priority())
+            .fill_null(value=False)
+            .alias(Col.HIGH_PRIO)
+        ),
+        (
+            pl.col(Col.HANDLE)
+            .is_in(get_low_priority())
+            .fill_null(value=False)
+            .alias(Col.LOW_PRIO)
+        ),
     )
 
     # Remove high priority if they already have low priority
@@ -85,13 +95,23 @@ def add_priority_info(registrations: pl.LazyFrame) -> pl.LazyFrame:
 def add_member_info(registrations: pl.LazyFrame) -> pl.LazyFrame:
     """Add member information to registration data."""
     return registrations.with_columns(
-        pl.col(Col.HANDLE).is_in(get_members()).fill_null(value=False).alias(Col.MEMBER),
-        pl.col(Col.HANDLE).is_in(get_members(Col.PAID)).fill_null(value=False).alias(Col.PAID),
+        (
+            pl.col(Col.HANDLE)
+            .is_in(get_members())
+            .fill_null(value=False)
+            .alias(Col.MEMBER)
+        ),
+        (
+            pl.col(Col.HANDLE)
+            .is_in(get_members(Col.PAID))
+            .fill_null(value=False)
+            .alias(Col.PAID)
+        ),
     )
 
 
 def remove_simultaneous_classes(registrations: pl.LazyFrame) -> pl.LazyFrame:
-    """Remove second choice if it happens at the same time as the first choice."""
+    """Remove second choice if overlaps with the first choice."""
     group_to_timeslot = {group: timeslot for group, _, timeslot in GROUP_INFO}
 
     # Add timeslot information
@@ -102,8 +122,12 @@ def remove_simultaneous_classes(registrations: pl.LazyFrame) -> pl.LazyFrame:
 
     # Remove overlapping timeslots
     return registrations.with_columns(
-        # Only allow 1 preference if the second preference is not the same class as the first
-        (pl.col(Col.ONLY_1) | pl.col(Col.TIMESLOT_1).eq(pl.col(Col.TIMESLOT_2))).alias(Col.ONLY_1),
+        # Only allow 1 preference if the second preference is not the same
+        # class as the first
+        (
+            pl.col(Col.ONLY_1)
+            | pl.col(Col.TIMESLOT_1).eq(pl.col(Col.TIMESLOT_2))
+        ).alias(Col.ONLY_1),
     )
 
 
@@ -129,12 +153,13 @@ def add_extra_columns(registrations: pl.LazyFrame) -> pl.LazyFrame:
     )
 
     return registrations.with_columns(
-        pl.lit(value=None).cast(pl.Int64).alias(group) for group in get_all_groups()
+        pl.lit(value=None).cast(pl.Int64).alias(group)
+        for group in get_all_groups()
     )
 
 
 def get_class_registrations() -> pl.LazyFrame:
-    """Load the data from the signup responses and creates the initial dataframe."""
+    """Load the signup responses and create the initial dataframe."""
     registrations = read()
     registrations = clean(registrations)
     registrations = add_priority_info(registrations)

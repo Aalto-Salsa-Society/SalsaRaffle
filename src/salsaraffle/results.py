@@ -20,12 +20,12 @@ LEADER: Final = "Leader"
 FOLLOWER: Final = "Follower"
 
 
-ACCEPTED: Final = pl.any_horizontal(pl.col(get_all_groups()).lt(MAX_PER_GROUP)).fill_null(
-    value=False
-)
-REJECTED: Final = pl.all_horizontal(pl.col(get_all_groups()).ge(MAX_PER_GROUP)).fill_null(
-    value=True
-)
+ACCEPTED: Final = pl.any_horizontal(
+    pl.col(get_all_groups()).lt(MAX_PER_GROUP)
+).fill_null(value=False)
+REJECTED: Final = pl.all_horizontal(
+    pl.col(get_all_groups()).ge(MAX_PER_GROUP)
+).fill_null(value=True)
 
 
 def create_group_excel_file(df: pl.DataFrame) -> None:
@@ -79,7 +79,9 @@ def create_attendance_sheet(
             pl.col(Col.MEMBER).alias("Member"),
             pl.col(Col.PAID).alias("Paid"),
         )
-        .with_columns(pl.lit(value=None).alias(keys) for keys in ATTENDANCE_WEEKS)
+        .with_columns(
+            pl.lit(value=None).alias(keys) for keys in ATTENDANCE_WEEKS
+        )
         .write_excel(
             workbook=workbook,
             worksheet=label_to_group[group_label] + " " + role,
@@ -98,15 +100,21 @@ def compile_results(groups_lazy: pl.LazyFrame) -> None:
     print("Total:   ", len(groups))
     print("Accepted:", len(groups.filter(ACCEPTED)))
     print("Rejected:", len(groups.filter(REJECTED)))
-    next_high_prio = groups.filter(REJECTED & ~pl.col(Col.LOW_PRIO)).select([Col.NAME, Col.HANDLE])
+    next_high_prio = groups.filter(REJECTED & ~pl.col(Col.LOW_PRIO)).select(
+        [Col.NAME, Col.HANDLE]
+    )
     print("Rejected and not low priority:", len(next_high_prio))
     print(next_high_prio)
     print("---")
-    accepted_emails = groups.filter(ACCEPTED).get_column(Col.EMAIL).unique().to_list()
+    accepted_emails = (
+        groups.filter(ACCEPTED).get_column(Col.EMAIL).unique().to_list()
+    )
     print(f"Accepted emails {len(accepted_emails)}:")
     print(*accepted_emails, sep=", ")
     print("---")
-    rejected_emails = groups.filter(REJECTED).get_column(Col.EMAIL).unique().to_list()
+    rejected_emails = (
+        groups.filter(REJECTED).get_column(Col.EMAIL).unique().to_list()
+    )
     print(f"Rejected emails {len(rejected_emails)}:")
     print(*rejected_emails, sep=", ")
     print("---")
