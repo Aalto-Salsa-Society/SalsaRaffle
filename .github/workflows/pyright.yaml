@@ -1,5 +1,5 @@
 name: pyright
-on: push
+on: [push, workflow_dispatch]
 jobs:
   pyright:
     runs-on: ubuntu-latest

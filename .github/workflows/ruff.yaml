@@ -1,5 +1,5 @@
 name: ruff
-on: push
+on: [push, workflow_dispatch]
 jobs:
   ruff:
     runs-on: ubuntu-latest
