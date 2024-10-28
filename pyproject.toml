@@ -46,4 +46,9 @@ unfixable = []
 typeCheckingMode = "standard"
 
 [tool.uv]
-dev-dependencies = ["numpy>=2.1.1", "pyright>=1.1.380", "ruff>=0.6.4"]
+dev-dependencies = [
+    "faker>=30.8.1",
+    "numpy>=2.1.1",
+    "pyright>=1.1.380",
+    "ruff>=0.6.4",
+]
