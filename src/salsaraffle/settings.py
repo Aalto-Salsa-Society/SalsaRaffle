@@ -41,7 +41,7 @@ RANDOM_SEED: Final = 455
 MAX_PER_GROUP: Final = 15
 
 # Required files
-INPUT_DIR: Final = Path("data") / "fakeinput"
+INPUT_DIR: Final = Path("data") / "input"
 OLD_GROUPS_FILE: Final = INPUT_DIR / "groups.csv"
 OLD_ATTENDANCE_FILE: Final = INPUT_DIR / "attendance.xlsx"
 MEMBERS_FILE: Final = INPUT_DIR / "Members.xlsx"

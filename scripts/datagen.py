@@ -1,5 +1,5 @@
-import os
 import random
+from pathlib import Path
 
 import polars as pl
 from faker import Faker
@@ -7,7 +7,7 @@ from xlsxwriter import Workbook
 
 from salsaraffle.registration import REGISTRATION_COLUMNS
 
-OUTPUT_DIR = "data/fakeinput/"
+OUTPUT_DIR = Path("data/generated_input/")
 MEMBER_FILENAME = "members.xlsx"
 RESPONSES_FILENAME = "responses.xlsx"
 
@@ -25,6 +25,7 @@ CLASSES = [
     "Bachata Level 1",
     "Bachata Level 2",
 ]
+# first choice class preference distribution
 CLASS_DIST = [
     0.3,
     0.15,
@@ -32,26 +33,28 @@ CLASS_DIST = [
     0.1,
     0.2,
     0.1,
-]  # first choice class preference distribution
+]
 
 ROLES = ["Leader", "Follower"]
 ROLE_DIST = [0.6, 0.4]  # follower vs leader ratio
 
 SECOND_PREF_OPTIONS = ["Yes", "No"]
+# Has second pref vs doesn't have second pref ratio
 SECOND_PREF_DIST = [
     0.3,
     0.7,
-]  # Has second pref vs doesn't have second pref ratio
+]
 
 
 def main() -> None:
+    """Generate data and write data to files."""
     df = gen_data()
     write_members_file(df)
     write_responses_file(df)
 
 
 def gen_data() -> pl.DataFrame:
-    """Return a df of data needed to generate member and responses excel files."""
+    """Return a df of data needed to generate member and responses excels."""
     fake = Faker()
 
     names = [
@@ -96,13 +99,13 @@ def gen_second_pref_data(df: pl.DataFrame, col_names: list) -> pl.DataFrame:
     """Generate data for students that selected a second preference."""
     second_class, second_role, both_pref = [], [], []
 
-    for row in df.iter_rows():  # there should be a way to replace this for loop with polars functions but idk how
+    for row in df.iter_rows():
         if row[5] == "Yes":
             classes = CLASSES.copy()
             classes.remove(row[3])
             second_class.append(
                 str(random.choice(classes))
-            )  # randomnly pick a class that isn't the first class, even distribution
+            )  #randomnly pick a class that isn't the first class
             second_role.append(
                 str(random.choice(ROLES))
             )  # randomnly pick a role, even distribution
@@ -126,10 +129,10 @@ def gen_second_pref_data(df: pl.DataFrame, col_names: list) -> pl.DataFrame:
 
 def write_members_file(df: pl.DataFrame) -> None:
     """Write member data to excel file."""
-    if not os.path.isdir(OUTPUT_DIR):
-        os.mkdir(OUTPUT_DIR)
+    if not Path.is_dir(OUTPUT_DIR):
+        Path.mkdir(OUTPUT_DIR)
 
-    with Workbook(OUTPUT_DIR + MEMBER_FILENAME) as wb:
+    with Workbook(OUTPUT_DIR / MEMBER_FILENAME) as wb:
         df.select(["Telegram handle", "approved", "paid"]).rename(
             {"Telegram handle": "handle"}
         ).write_excel(workbook=wb)
@@ -137,10 +140,10 @@ def write_members_file(df: pl.DataFrame) -> None:
 
 def write_responses_file(df: pl.DataFrame) -> None:
     """Write response data to excel file."""
-    if not os.path.isdir(OUTPUT_DIR):
-        os.mkdir(OUTPUT_DIR)
+    if not Path.is_dir(OUTPUT_DIR):
+        Path.mkdir(OUTPUT_DIR)
 
-    with Workbook(OUTPUT_DIR + RESPONSES_FILENAME) as wb:
+    with Workbook(OUTPUT_DIR / RESPONSES_FILENAME) as wb:
         df.sample(NUM_REG).select(
             [pl.all().exclude(["approved", "paid"])]
         ).write_excel(workbook=wb)
