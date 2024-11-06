@@ -25,6 +25,16 @@ uv run pyright
 uv run ruff check
 ```
 
+## Data
+
+You need the membership and responses data to run the raffle. Due to the
+sensitive nature of the data, you can generate suitable mock data with the
+generation script.
+
+```bash
+uv run scripts/datagen.py
+```
+
 ## Design Decisions
 
 The script divides the students into their respective levels. The highest
