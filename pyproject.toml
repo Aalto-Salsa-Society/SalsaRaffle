@@ -38,12 +38,22 @@ ignore = [
 	"Q002",
 	"Q003",
 	"W191",
+	# Allow unsafe cryptographic methods
+	"S311",
 ]
 fixable = ["ALL"]
 unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["INP001"] # implicit namespace package
 
 [tool.pyright]
 typeCheckingMode = "standard"
 
 [tool.uv]
-dev-dependencies = ["numpy>=2.1.1", "pyright>=1.1.380", "ruff>=0.6.4"]
+dev-dependencies = [
+    "faker>=30.8.1",
+    "numpy>=2.1.1",
+    "pyright>=1.1.380",
+    "ruff>=0.6.4",
+]
