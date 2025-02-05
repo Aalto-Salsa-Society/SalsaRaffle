@@ -97,7 +97,7 @@ def add_member_info(registrations: pl.LazyFrame) -> pl.LazyFrame:
     return registrations.with_columns(
         (
             pl.col(Col.HANDLE)
-            .is_in(get_members())
+            .is_in(get_members(Col.APPROVED))
             .fill_null(value=False)
             .alias(Col.MEMBER)
         ),

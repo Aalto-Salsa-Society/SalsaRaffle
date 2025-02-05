@@ -10,7 +10,7 @@ from salsaraffle.settings import MEMBERS_FILE
 logger = logging.getLogger(__name__)
 
 
-def get_members(condition: pl.Expr | str = Col.APPROVED) -> pl.Series:
+def get_members(condition: pl.Expr | str) -> pl.Series:
     """Return a list of ASS members."""
     if not MEMBERS_FILE.exists():
         logger.warning("No members list found")
