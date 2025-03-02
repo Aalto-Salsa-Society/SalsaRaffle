@@ -6,8 +6,13 @@ from typing import Final
 import polars as pl
 
 from salsaraffle.column import Col
-from salsaraffle.results import ATTENDANCE_WEEKS, REJECTED
-from salsaraffle.settings import OLD_ATTENDANCE_FILE, OLD_GROUPS_FILE
+from salsaraffle.results import ATTENDANCE_WEEKS
+from salsaraffle.settings import (
+    GROUP_INFO,
+    MAX_PER_GROUP,
+    OLD_ATTENDANCE_FILE,
+    OLD_GROUPS_FILE,
+)
 
 
 def get_high_priority() -> pl.Series:
@@ -16,13 +21,43 @@ def get_high_priority() -> pl.Series:
         logging.warning("No groups file found in input")
         return pl.Series(dtype=pl.Utf8)
 
-    return (
+    if not OLD_ATTENDANCE_FILE.exists():
+        logging.warning("No attendance file found")
+        return pl.Series(dtype=pl.Utf8)
+
+    all_sheets = pl.read_excel(OLD_ATTENDANCE_FILE, sheet_id=0)
+
+    # Find maximum number of participants
+    max_per_group = {group: MAX_PER_GROUP for group, _, _ in GROUP_INFO}
+    for name, sheet in all_sheets.items():
+        group = name.rsplit(maxsplit=1)[0]
+        max_per_group[group] = min(len(sheet), max_per_group[group])
+
+    # Find people who did not get to go to class
+    missed_out = []
+    for name, sheet in all_sheets.items():
+        group = name.rsplit(maxsplit=1)[0]
+        max_participants = max_per_group[group]
+        missed_out.append(sheet[max_participants:])
+    missed_out_handles = (
+        pl.concat(missed_out)
+        .select(ATTENDANCE_COLUMNS)
+        .rename(ATTENDANCE_COLUMNS)
+        .drop_nulls(Col.HANDLE)
+    )
+
+    # Originally signed up handles that should have gotten a spot
+    signed_up_handles = (
         pl.scan_csv(OLD_GROUPS_FILE)
         .with_columns(pl.col(Col.HANDLE).str.to_lowercase())
-        .filter(REJECTED & ~pl.col(Col.LOW_PRIO))
+        .filter(~pl.col(Col.LOW_PRIO))
         .collect()
         .get_column(Col.HANDLE)
     )
+
+    return missed_out_handles.filter(
+        pl.col(Col.HANDLE).is_in(signed_up_handles)
+    ).get_column(Col.HANDLE)
 
 
 NO_SHOW: Final = "no_show"
@@ -55,7 +90,6 @@ def get_low_priority() -> pl.Series:
             pl.sum_horizontal(gave_notice).ge(2).alias(GAVE_NOTICE),
         )
         .filter(pl.col(NO_SHOW) | pl.col(GAVE_NOTICE))
-        .select(Col.HANDLE)
         .collect()
         .get_column(Col.HANDLE)
     )
