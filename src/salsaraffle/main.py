@@ -2,13 +2,14 @@
 
 import logging
 from collections.abc import Callable
+from typing import Final
 
 import polars as pl
 
 from salsaraffle.column import Col, get_all_groups
 from salsaraffle.registration import get_class_registrations
-from salsaraffle.results import REJECTED, compile_results
-from salsaraffle.settings import INPUT_DIR, OUTPUT_DIR
+from salsaraffle.results import compile_results
+from salsaraffle.settings import INPUT_DIR, MAX_PER_GROUP, OUTPUT_DIR
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +37,11 @@ def assign(
         )
 
     return lf
+
+
+REJECTED: Final = pl.all_horizontal(
+    pl.col(get_all_groups()).ge(MAX_PER_GROUP)
+).fill_null(value=True)
 
 
 def main() -> None:
