@@ -24,6 +24,7 @@ class Col(enum.StrEnum):
     HIGH_PRIO = "high_priority"
     MED_PRIO = "medium_priority"
     LOW_PRIO = "low_priority"
+    ACCEPTED = "accepted"
 
     # Membership columns
     MEMBER = "member"

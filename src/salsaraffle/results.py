@@ -1,11 +1,11 @@
 """Creates output sheets that are uploaded to the members."""
 
-from typing import Final
+from typing import Final, Literal
 
 import polars as pl
 from xlsxwriter import Workbook
 
-from salsaraffle.column import Col, get_all_groups
+from salsaraffle.column import Col
 from salsaraffle.settings import (
     GROUP_INFO,
     GROUPS_FILE,
@@ -13,19 +13,6 @@ from salsaraffle.settings import (
     NEW_ATTENDANCE_FILE,
     RAW_GROUPS_FILE,
 )
-
-LEADER_LABEL: Final = "L"
-FOLLOWER_LABEL: Final = "F"
-LEADER: Final = "Leader"
-FOLLOWER: Final = "Follower"
-
-
-ACCEPTED: Final = pl.any_horizontal(
-    pl.col(get_all_groups()).lt(MAX_PER_GROUP)
-).fill_null(value=False)
-REJECTED: Final = pl.all_horizontal(
-    pl.col(get_all_groups()).ge(MAX_PER_GROUP)
-).fill_null(value=True)
 
 
 def create_group_excel_file(df: pl.DataFrame) -> None:
@@ -35,14 +22,14 @@ def create_group_excel_file(df: pl.DataFrame) -> None:
     with Workbook(GROUPS_FILE) as workbook:
         for _, group_label, _ in GROUP_INFO:
             leaders = (
-                df.filter(pl.col(group_label + LEADER_LABEL).is_not_null())
-                .sort(group_label + LEADER_LABEL)
-                .select(pl.col(Col.NAME).alias(LEADER + " Name"))
+                df.filter(pl.col(group_label + "L").is_not_null())
+                .sort(group_label + "L")
+                .select(pl.col(Col.NAME).alias("Leader Name"))
             )
             followers = (
-                df.filter(pl.col(group_label + FOLLOWER_LABEL).is_not_null())
-                .sort(group_label + FOLLOWER_LABEL)
-                .select(pl.col(Col.NAME).alias(FOLLOWER + " Name"))
+                df.filter(pl.col(group_label + "F").is_not_null())
+                .sort(group_label + "F")
+                .select(pl.col(Col.NAME).alias("Follower Name"))
             )
             pl.concat((leaders, followers), how="horizontal").write_excel(
                 workbook=workbook,
@@ -64,10 +51,10 @@ def create_attendance_sheet(
     df: pl.DataFrame,
     workbook: Workbook,
     group_label: str,
-    role: str,
+    role: Literal["Leader", "Follower"],
 ) -> None:
     """Create one sheet in the attendance workbook."""
-    role_to_label = {LEADER: LEADER_LABEL, FOLLOWER: FOLLOWER_LABEL}
+    role_to_label = {"Leader": "L", "Follower": "F"}
     label_to_group = {label: group for group, label, _ in GROUP_INFO}
 
     (
@@ -91,30 +78,52 @@ def create_attendance_sheet(
     )
 
 
+def add_accepted_status(groups: pl.DataFrame) -> pl.DataFrame:
+    """Add checks whether someone is accepted or not."""
+    groups = groups.with_columns(pl.lit(value=False).alias(Col.ACCEPTED))
+
+    for _, level, _ in GROUP_INFO:
+        leader_col_name = level + "L"
+        follow_col_name = level + "F"
+
+        leader_max = groups.get_column(leader_col_name).max()
+        follow_max = groups.get_column(follow_col_name).max()
+
+        if leader_max is None or follow_max is None:
+            msg = f"No leaders or followers found in {level}"
+            raise ValueError(msg)
+
+        role_max = min(leader_max, follow_max, MAX_PER_GROUP)
+        leader_col = pl.col(leader_col_name)
+        follow_col = pl.col(follow_col_name)
+        groups = groups.with_columns(
+            pl.col(Col.ACCEPTED)
+            | (leader_col.is_not_null() & (leader_col <= role_max))
+            | (follow_col.is_not_null() & (follow_col <= role_max))
+        )
+
+    return groups
+
+
 def compile_results(groups_lazy: pl.LazyFrame) -> None:
     """Generate the output files of the program."""
     groups = groups_lazy.collect()
+    groups = add_accepted_status(groups)
+    accepted = groups.filter(pl.col(Col.ACCEPTED))
+    rejected = groups.filter(~pl.col(Col.ACCEPTED))
 
     print("---")
     print("Number of applicants:")
     print("Total:   ", len(groups))
-    print("Accepted:", len(groups.filter(ACCEPTED)))
-    print("Rejected:", len(groups.filter(REJECTED)))
-    next_high_prio = groups.filter(REJECTED & ~pl.col(Col.LOW_PRIO)).select(
-        [Col.NAME, Col.HANDLE]
-    )
-    print("Rejected and not low priority:", len(next_high_prio))
-    print(next_high_prio)
+    print("Rejected:", len(rejected))
+    rejected_no_low_prio = rejected.filter(~pl.col(Col.LOW_PRIO))
+    print("Rejected and not low priority:\n", rejected_no_low_prio)
     print("---")
-    accepted_emails = (
-        groups.filter(ACCEPTED).get_column(Col.EMAIL).unique().to_list()
-    )
+    accepted_emails = accepted.get_column(Col.EMAIL).unique().to_list()
     print(f"Accepted emails {len(accepted_emails)}:")
     print(*accepted_emails, sep=", ")
     print("---")
-    rejected_emails = (
-        groups.filter(REJECTED).get_column(Col.EMAIL).unique().to_list()
-    )
+    rejected_emails = rejected.get_column(Col.EMAIL).unique().to_list()
     print(f"Rejected emails {len(rejected_emails)}:")
     print(*rejected_emails, sep=", ")
     print("---")
@@ -124,5 +133,5 @@ def compile_results(groups_lazy: pl.LazyFrame) -> None:
 
     with Workbook(NEW_ATTENDANCE_FILE) as workbook:
         for _, label, _ in GROUP_INFO:
-            create_attendance_sheet(groups, workbook, label, LEADER)
-            create_attendance_sheet(groups, workbook, label, FOLLOWER)
+            create_attendance_sheet(groups, workbook, label, "Leader")
+            create_attendance_sheet(groups, workbook, label, "Follower")
